@@ -1,0 +1,8 @@
+{
+  "name": "workspace-root-fixture",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "workspaces": [
+    "packages/*"
+  ]
+}

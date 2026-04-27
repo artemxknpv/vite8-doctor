@@ -1,0 +1,9 @@
+{
+  "name": "yarn-app-fixture",
+  "private": true,
+  "type": "module",
+  "packageManager": "yarn@4.0.0",
+  "devDependencies": {
+    "vite": "^7.3.0"
+  }
+}

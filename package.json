@@ -1,0 +1,42 @@
+{
+  "name": "vite8-doctor",
+  "version": "0.1.0",
+  "description": "Vite 8 / Rolldown migration diagnostics with safe build probes.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/artemxknpv/vite8-doctor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/artemxknpv/vite8-doctor/issues"
+  },
+  "homepage": "https://github.com/artemxknpv/vite8-doctor#readme",
+  "keywords": [
+    "vite",
+    "vite8",
+    "rolldown",
+    "migration",
+    "doctor",
+    "diagnostics",
+    "build-tool"
+  ],
+  "files": [
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ],
+  "bin": {
+    "vite8-doctor": "bin/vite8-doctor.mjs"
+  },
+  "scripts": {
+    "doctor": "node ./bin/vite8-doctor.mjs",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "dependencies": {
+    "semver": "^7.7.4"
+  }
+}

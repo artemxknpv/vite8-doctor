@@ -1,0 +1,156 @@
+# vite8-doctor
+
+Check a Vite app before moving it to Vite 8 / Rolldown.
+
+`vite8-doctor` scans local config, checks Vite plugin peer ranges, and can run build probes in temp directories. The goal is simple: separate "this project is already broken" from "the Vite 8 build changed something worth looking at".
+
+It does not prove that an app is compatible. It gives you a short report with evidence.
+
+## Usage
+
+Requires Node `^20.19.0 || >=22.12.0`.
+
+```sh
+npx vite8-doctor /path/to/project
+```
+
+JSON output:
+
+```sh
+npx vite8-doctor /path/to/project --json
+```
+
+GitHub-ready report:
+
+```sh
+npx vite8-doctor /path/to/project --report github
+```
+
+Run the current Vite build in a temporary output directory:
+
+```sh
+npx vite8-doctor /path/to/project --probe-build
+```
+
+Compare it with Vite 8 in a temporary project copy:
+
+```sh
+npx vite8-doctor /path/to/project --probe-build --probe-vite8 --allow-install
+```
+
+`--probe-vite8` requires `--allow-install` because it installs dependencies in the temporary copy. The original project is not modified.
+
+## What It Checks
+
+- Vite version/range from `package.json`
+- nearest `vite.config.*`
+- Vite plugin imports
+- installed plugin versions and `peerDependencies.vite`
+- migration-sensitive config such as `optimizeDeps`, `manualChunks`, `rollupOptions`, `esbuild`, `plugin-legacy`, and custom build targets
+- workspace project shape
+- current build status when `--probe-build` is enabled
+- temporary Vite 8 build status when `--probe-vite8 --allow-install` is enabled
+- migration hints with source URLs or local evidence
+- build output deltas when both current and Vite 8 builds run
+
+## Report Formats
+
+- `--report markdown`: default terminal-friendly markdown.
+- `--report json`: structured report for scripts.
+- `--report github`: paste-ready issue or discussion report.
+- `--json`: backward-compatible alias for `--report json`.
+
+## Migration Hints
+
+Hints are prompts for review. They are not compatibility guarantees.
+
+`0.1` covers these signals:
+
+- `optimizeDeps` and `optimizeDeps.esbuildOptions`
+- `rollupOptions` and `manualChunks`
+- Vite plugin peer metadata that excludes Vite 8
+- workspace scope limits
+- current build failures
+- disabled Yarn Vite 8 comparison
+- Vite large chunk warnings
+
+External migration hints link to Vite docs. Local hints cite package metadata, build output, or tool limitations.
+
+## Probe Classifications
+
+- `passed`: current build passed and no static risks were detected.
+- `passed-with-risks`: build passed, but config or plugin metadata deserves review.
+- `baseline-broken`: the current build already fails; this is not classified as a Vite 8 migration failure.
+- `vite8-build-failed`: current build passed, but the temporary Vite 8 build failed.
+- `probe-inconclusive`: the probe was skipped or could not complete.
+
+## Build Output Delta
+
+When both builds run, `vite8-doctor` compares asset count, total bytes, largest assets, warnings, and changed/added/removed asset names.
+
+Asset paths are relative to each build `outDir`. The report should not expose absolute temporary paths.
+
+## Safety Model
+
+Static scanning only reads local files.
+
+Probe mode executes project build tooling. Use it only on projects you trust. It is not a sandbox.
+
+`--probe-build` prefers the existing local Vite binary and can fall back to package-manager exec with a temporary `outDir`.
+
+`--probe-vite8 --allow-install` copies the project to a temporary directory, skips `.git`, `.nx`, `node_modules`, `.omx`, `.tasks`, `.ai`, `.omc`, common build output, `.env*`, `.npmrc`, `.yarnrc*`, and `.pnpmfile.cjs`, then installs Vite 8 inside that copy.
+
+npm and pnpm installs use `--ignore-scripts`. Yarn Vite 8 comparison is rejected in `0.1` because lifecycle-script suppression is not handled safely yet.
+
+Probe subprocesses run with a reduced environment. Known secret values from the parent environment are redacted from captured output, but project tooling can still print sensitive data from files it reads itself. Review reports before pasting them into public issues.
+
+## Workspace Scope
+
+`0.1` supports standalone package probes.
+
+Workspace roots are reported as `workspace-root` with detected child packages. Workspace child packages are reported as `workspace-child`; probe mode returns `probe-inconclusive` with `unsupported-workspace-child`.
+
+This avoids a bad result from copying one child package without the workspace around it.
+
+## Example
+
+```md
+# vite8-doctor report
+
+project: oklch-picker
+package manager: pnpm
+vite range: ^8.0.8
+project shape: standalone
+
+## config risks
+- [medium] rollup-options: rollupOptions are worth probing because Vite 8 routes build behavior through Rolldown.
+  evidence: vite.config.ts:15 `rollupOptions: {`
+
+## plugin peer ranges
+- vite-plugin-pug-transformer: 1.0.8, peer vite ^2.5.10 || ^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0; does not declare vite 8 support
+  note: peer metadata can lag behind actual compatibility; this is a review signal, not proof of breakage.
+```
+
+## Limitations
+
+- Static findings are review signals, not failures.
+- Peer dependency metadata can lag behind actual compatibility.
+- Runtime correctness still requires the project's own tests.
+- Workspace-aware temp probes are not supported in `0.1`.
+- Hints are a small initial catalog, not a full Vite 8 issue database.
+- Plug'n'Play-specific detection is deferred until there is a real signal and a fixture.
+
+## Case Studies
+
+Local development cases live under `docs/cases/`. They are excluded from the npm package by the package `files` allowlist.
+
+## Development
+
+```sh
+node --test
+node ./bin/vite8-doctor.mjs --help
+node ./bin/vite8-doctor.mjs fixtures/vite-basic --json
+node ./bin/vite8-doctor.mjs fixtures/vite-baseline-broken --probe-build --json
+node ./bin/vite8-doctor.mjs fixtures/vite-dual-build --probe-build --probe-vite8 --allow-install --report github
+npm pack --dry-run --json
+```

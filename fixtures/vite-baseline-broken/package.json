@@ -1,0 +1,8 @@
+{
+  "name": "vite-baseline-broken-fixture",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "vite": "^7.3.0"
+  }
+}

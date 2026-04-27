@@ -1,0 +1,10 @@
+node_modules/
+!fixtures/**/node_modules/
+!fixtures/**/node_modules/**
+.idea/
+*.tgz
+.DS_Store
+.tasks/
+.ai/
+.omx/
+.omc/
