@@ -68,7 +68,7 @@ Hints are prompts for review. They are not compatibility guarantees.
 
 - `optimizeDeps` and `optimizeDeps.esbuildOptions`
 - `rollupOptions` and `manualChunks`
-- Vite plugin peer metadata that excludes Vite 8
+- package and Vite plugin peer metadata that excludes Vite 8
 - workspace scope limits
 - current build failures
 - disabled Yarn Vite 8 comparison

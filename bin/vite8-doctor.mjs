@@ -332,6 +332,7 @@ function analyze(root) {
   const configPath = findConfig(projectRoot)
   const configSource = configPath ? fs.readFileSync(configPath, 'utf8') : ''
   const pluginImports = configPath ? extractPluginImports(configSource) : []
+  const ownVitePeerRange = pkg.peerDependencies?.vite ?? null
 
   const risks = []
   for (const pattern of RISK_PATTERNS) {
@@ -368,6 +369,8 @@ function analyze(root) {
     packageManager,
     packageManagerRaw: pkg.packageManager ?? null,
     viteRange: deps.vite ?? null,
+    ownVitePeerRange,
+    ownVite8PeerSupported: vitePeerSupports8(ownVitePeerRange),
     configPath,
     projectShape,
     environment: {
@@ -378,6 +381,7 @@ function analyze(root) {
       packageManagerRaw: pkg.packageManager ?? null,
       packageName: pkg.name ?? null,
       viteRange: deps.vite ?? null,
+      ownVitePeerRange,
       projectRoot,
       configPath,
       projectShape: projectShape.kind
@@ -761,6 +765,23 @@ function generateMigrationHints(report) {
     })
   }
 
+  if (report.ownVitePeerRange && report.ownVite8PeerSupported === false) {
+    hints.push({
+      id: 'package-peer-metadata',
+      title: 'This package does not declare Vite 8 peer support',
+      trigger: 'package peerDependencies.vite excludes Vite 8',
+      evidence: {
+        packageName: report.packageName,
+        vitePeerRange: report.ownVitePeerRange,
+        projectRoot: report.projectRoot
+      },
+      sourceType: 'package-metadata',
+      sourceUrl: null,
+      disclaimer: 'Peer metadata can lag behind actual compatibility; this is not proof of breakage.',
+      nextStep: 'Check whether this package has a Vite 8-compatible release or run its test suite against Vite 8.'
+    })
+  }
+
   if (report.projectShape.kind === 'workspace-root' || report.projectShape.kind === 'workspace-child') {
     hints.push({
       id: 'workspace-scope',
@@ -829,7 +850,9 @@ function hasFormalizedRisk(report) {
     'optimize-deps-esbuild-options',
     'rollup-output-manual-chunks',
     'rollup-options'
-  ].includes(risk.id)) || report.plugins.some(plugin => plugin.vite8PeerSupported === false)
+  ].includes(risk.id)) ||
+    report.plugins.some(plugin => plugin.vite8PeerSupported === false) ||
+    (report.ownVitePeerRange && report.ownVite8PeerSupported === false)
 }
 
 function riskEvidence(report, ...ids) {
@@ -997,6 +1020,7 @@ function renderHintSource(hint) {
 function formatHintEvidence(evidence) {
   if (!evidence) return '(none)'
   if (evidence.file) return `${evidence.file}:${evidence.line} \`${evidence.snippet}\``
+  if (evidence.packageName && evidence.vitePeerRange) return `${evidence.packageName} peer vite ${evidence.vitePeerRange}`
   if (evidence.packageJsonPath) return `${evidence.spec} peer vite ${evidence.vitePeerRange} in ${evidence.packageJsonPath}`
   if (evidence.warnings) return evidence.warnings.join(' | ')
   if (evidence.command) return `${evidence.command} exited ${evidence.exitCode}`

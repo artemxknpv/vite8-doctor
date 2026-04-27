@@ -110,6 +110,15 @@ test('uses semver semantics for Vite 8 peer support', () => {
   assert.match(peerHint.disclaimer, /not proof of breakage/)
 })
 
+test('flags package-level Vite peer metadata that excludes Vite 8', () => {
+  const report = json(['fixtures/package-peer'])
+  assert.equal(report.ownVitePeerRange, '^7.0.0')
+  assert.equal(report.ownVite8PeerSupported, false)
+  const hint = report.migrationHints.find(candidate => candidate.id === 'package-peer-metadata')
+  assert.equal(hint.sourceType, 'package-metadata')
+  assert.match(hint.evidence.vitePeerRange, /\^7/)
+})
+
 test('detects workspace root instead of a clean standalone report', () => {
   const report = json(['fixtures/workspace-root'])
   assert.equal(report.projectShape.kind, 'workspace-root')

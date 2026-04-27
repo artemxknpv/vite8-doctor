@@ -1,0 +1,8 @@
+{
+  "name": "vite-plugin-package-peer-fixture",
+  "private": true,
+  "type": "module",
+  "peerDependencies": {
+    "vite": "^7.0.0"
+  }
+}
