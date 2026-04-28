@@ -6,6 +6,27 @@ Check a Vite app before moving it to Vite 8 / Rolldown.
 
 It does not prove that an app is compatible. It gives you a short report with evidence.
 
+## Skip This README
+
+If you are using an AI coding agent, give it this:
+
+```text
+Use vite8-doctor to triage this project before a Vite 8 / Rolldown migration.
+
+Run:
+npx vite8-doctor . --probe-build --report json
+
+If dependency installs are acceptable in a temporary copy, also run:
+npx vite8-doctor . --probe-build --probe-vite8 --allow-install --report json
+
+Read the JSON contract before acting on the report:
+https://raw.githubusercontent.com/artemxknpv/vite8-doctor/refs/heads/main/docs/json-contract.md
+
+Use summary.status for routing and migrationHints[].agentAction for follow-up planning.
+Do not automatically edit config or dependencies based only on vite8-doctor hints.
+Treat the report as migration triage, not compatibility proof.
+```
+
 ## Usage
 
 Requires Node `^20.19.0 || >=22.12.0`.
