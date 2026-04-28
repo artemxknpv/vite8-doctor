@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="1114" viewBox="0 0 1180 1114" role="img" aria-label="vite8-doctor terminal report example">
+  <rect width="1180" height="1114" rx="14" fill="#0b1020"/>
+  <rect x="1" y="1" width="1178" height="1112" rx="13" fill="none" stroke="#26324a"/>
+  <circle cx="28" cy="30" r="7" fill="#ff5f57"/>
+  <circle cx="52" cy="30" r="7" fill="#ffbd2e"/>
+  <circle cx="76" cy="30" r="7" fill="#28c840"/>
+  <text x="104" y="35" fill="#94a3b8" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14">vite8-doctor</text>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14" xml:space="preserve">
+<text x="28" y="72" fill="#7dd3fc">$ npx vite8-doctor . --probe-build --report github</text>
+<text x="28" y="94" fill="#cbd5e1"></text>
+<text x="28" y="116" fill="#f8fafc">## vite8-doctor report</text>
+<text x="28" y="138" fill="#cbd5e1"></text>
+<text x="28" y="160" fill="#f8fafc">### Environment</text>
+<text x="28" y="182" fill="#cbd5e1">- package: vite-basic-fixture</text>
+<text x="28" y="204" fill="#cbd5e1">- root: .</text>
+<text x="28" y="226" fill="#cbd5e1">- node: v24.15.0</text>
+<text x="28" y="248" fill="#cbd5e1">- platform: darwin/arm64</text>
+<text x="28" y="270" fill="#cbd5e1">- package manager: npm (no packageManager field)</text>
+<text x="28" y="292" fill="#cbd5e1">- vite range: ^7.3.0</text>
+<text x="28" y="314" fill="#cbd5e1">- config: vite.config.js</text>
+<text x="28" y="336" fill="#cbd5e1">- project shape: standalone</text>
+<text x="28" y="358" fill="#cbd5e1"></text>
+<text x="28" y="380" fill="#f8fafc">### Summary</text>
+<text x="28" y="402" fill="#cbd5e1">- config risks: 1</text>
+<text x="28" y="424" fill="#cbd5e1">- plugin peer issues: 0</text>
+<text x="28" y="446" fill="#cbd5e1">- plugin metadata unavailable: 0</text>
+<text x="28" y="468" fill="#cbd5e1">- migration hints: 1</text>
+<text x="28" y="490" fill="#facc15">- probe classification: passed-with-risks</text>
+<text x="28" y="512" fill="#cbd5e1"></text>
+<text x="28" y="534" fill="#f8fafc">### migration hints</text>
+<text x="28" y="556" fill="#cbd5e1">- optimize-deps: Dependency optimizer config needs review</text>
+<text x="28" y="578" fill="#cbd5e1">  trigger: vite.config contains optimizeDeps customization</text>
+<text x="28" y="600" fill="#cbd5e1">  source: docs (https://vite.dev/guide/migration.html)</text>
+<text x="28" y="622" fill="#cbd5e1">  evidence: vite.config.js:6 `optimizeDeps: {`</text>
+<text x="28" y="644" fill="#cbd5e1">  note: Migration hint only; verify optimizer behavior in this project.</text>
+<text x="28" y="666" fill="#cbd5e1">  next: Run the build probe and the project tests around dependencies that are optimized or excluded.</text>
+<text x="28" y="688" fill="#cbd5e1"></text>
+<text x="28" y="710" fill="#f8fafc">### Config risks</text>
+<text x="28" y="732" fill="#cbd5e1">- [medium] optimize-deps: optimizeDeps customization should be checked against Vite 8 dependency optimization behavior.</text>
+<text x="28" y="754" fill="#cbd5e1">  - evidence: vite.config.js:6 `optimizeDeps: {`</text>
+<text x="28" y="776" fill="#cbd5e1"></text>
+<text x="28" y="798" fill="#f8fafc">### Plugin peer ranges</text>
+<text x="28" y="820" fill="#cbd5e1">- @vitejs/plugin-react: 5.2.0, peer vite ^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0; supports Vite 8</text>
+<text x="28" y="842" fill="#cbd5e1">- vite-plugin-wide-range: 1.0.0, peer vite &gt;=5 &lt;9; supports Vite 8</text>
+<text x="28" y="864" fill="#cbd5e1"></text>
+<text x="28" y="886" fill="#f8fafc">### Probe</text>
+<text x="28" y="908" fill="#facc15">classification: passed-with-risks</text>
+<text x="28" y="930" fill="#cbd5e1">temp: (removed)</text>
+<text x="28" y="952" fill="#cbd5e1"></text>
+<text x="28" y="974" fill="#f8fafc">#### current build</text>
+<text x="28" y="996" fill="#cbd5e1">status: passed</text>
+<text x="28" y="1018" fill="#cbd5e1">command: ./node_modules/.bin/vite build --outDir &lt;temp&gt;/current --emptyOutDir true</text>
+<text x="28" y="1040" fill="#cbd5e1">exit: 0</text>
+<text x="28" y="1062" fill="#cbd5e1">assets: 1 files, 2 B</text>
+  </g>
+</svg>

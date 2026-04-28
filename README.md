@@ -12,6 +12,8 @@ npx vite8-doctor . --probe-build --report json
 
 Use the JSON output for CI scripts, issue triage, and AI coding agents. Use `--probe-vite8 --allow-install` only when dependency installs in a temporary copy are acceptable.
 
+![vite8-doctor terminal report example](https://raw.githubusercontent.com/artemxknpv/vite8-doctor/main/docs/assets/terminal-demo.svg)
+
 ## Skip This README
 
 If you are using an AI coding agent, give it this:
