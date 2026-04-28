@@ -60,6 +60,8 @@ npx vite8-doctor /path/to/project --probe-build --probe-vite8 --allow-install
 - `--report github`: paste-ready issue or discussion report.
 - `--json`: backward-compatible alias for `--report json`.
 
+The JSON report is meant to be consumed by scripts and AI agents. It includes `schemaVersion`, tool metadata, a machine-oriented `summary`, stable hint ids, and conservative `agentAction` objects. See `docs/json-contract.md`.
+
 ## Migration Hints
 
 Hints are prompts for review. They are not compatibility guarantees.
@@ -139,6 +141,7 @@ project shape: standalone
 - Peer dependency metadata can lag behind actual compatibility.
 - Missing plugin metadata means the dependency graph is not installed or not inspectable; it is not a compatibility signal.
 - A missing dependency in the temporary Vite 8 copy can be a temp install artifact. Reproduce it on a normal branch before treating it as a migration failure.
+- AI agents should use JSON output for triage, issue drafting, and migration planning. They should not automatically edit config or dependencies based only on `vite8-doctor` hints.
 - Runtime correctness still requires the project's own tests.
 - Workspace-aware temp probes are not supported in `0.1`.
 - Hints are a small initial catalog, not a full Vite 8 issue database.

@@ -70,6 +70,10 @@ const RISK_PATTERNS = [
 const DEFAULT_TIMEOUT_MS = 120_000
 const OUTPUT_LIMIT = 12_000
 const LARGE_CHUNK_RE = /larger than 500 kB/i
+const REPORT_SCHEMA_VERSION = 1
+const TOOL_PACKAGE = readToolPackage()
+const TOOL_NAME = TOOL_PACKAGE.name
+const TOOL_VERSION = TOOL_PACKAGE.version
 const VITE_MIGRATION_DOC = 'https://vite.dev/guide/migration.html'
 const VITE_ROLLDOWN_DOC = 'https://vite.dev/guide/rolldown'
 const SAFE_ENV_KEYS = [
@@ -110,6 +114,14 @@ const COPY_EXCLUDES = new Set([
 
 function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'))
+}
+
+function readToolPackage() {
+  try {
+    return readJson(new URL('../package.json', import.meta.url))
+  } catch {
+    return { name: 'vite8-doctor', version: '0.1.0' }
+  }
 }
 
 function findUp(start, fileName) {
@@ -370,6 +382,11 @@ function analyze(root) {
   })
 
   return {
+    schemaVersion: REPORT_SCHEMA_VERSION,
+    tool: {
+      name: TOOL_NAME,
+      version: TOOL_VERSION
+    },
     projectRoot,
     packageName: pkg.name ?? null,
     packageManager,
@@ -778,7 +795,8 @@ function generateMigrationHints(report) {
       sourceType: 'docs',
       sourceUrl: VITE_MIGRATION_DOC,
       disclaimer: 'Migration hint only; verify optimizer behavior in this project.',
-      nextStep: 'Run the build probe and the project tests around dependencies that are optimized or excluded.'
+      nextStep: 'Run the build probe and the project tests around dependencies that are optimized or excluded.',
+      agentAction: agentAction('run-focused-tests', 'dependency-optimizer')
     })
   }
 
@@ -791,7 +809,8 @@ function generateMigrationHints(report) {
       sourceType: 'docs',
       sourceUrl: VITE_ROLLDOWN_DOC,
       disclaimer: 'Migration hint only; chunking differences are not a failure by themselves.',
-      nextStep: 'Compare build output and inspect changed chunks before changing config.'
+      nextStep: 'Compare build output and inspect changed chunks before changing config.',
+      agentAction: agentAction('compare-build-output', 'chunks')
     })
   }
 
@@ -808,7 +827,8 @@ function generateMigrationHints(report) {
       sourceType: 'package-metadata',
       sourceUrl: null,
       disclaimer: 'Peer metadata can lag behind actual compatibility; this is not proof of breakage.',
-      nextStep: 'Check the plugin release notes or run a focused build/test with the plugin enabled.'
+      nextStep: 'Check the plugin release notes or run a focused build/test with the plugin enabled.',
+      agentAction: agentAction('review-package-metadata', plugin.spec)
     })
   }
 
@@ -826,7 +846,8 @@ function generateMigrationHints(report) {
       sourceType: 'package-metadata',
       sourceUrl: null,
       disclaimer: 'Missing plugin metadata is not a compatibility signal; install dependencies before trusting peer-range output.',
-      nextStep: 'Install project dependencies, rerun the report, and check whether the plugin declares Vite 8 support.'
+      nextStep: 'Install project dependencies, rerun the report, and check whether the plugin declares Vite 8 support.',
+      agentAction: agentAction('install-dependencies-and-rerun', plugin.spec)
     })
   }
 
@@ -843,7 +864,8 @@ function generateMigrationHints(report) {
       sourceType: 'package-metadata',
       sourceUrl: null,
       disclaimer: 'Peer metadata can lag behind actual compatibility; this is not proof of breakage.',
-      nextStep: 'Check whether this package has a Vite 8-compatible release or run its test suite against Vite 8.'
+      nextStep: 'Check whether this package has a Vite 8-compatible release or run its test suite against Vite 8.',
+      agentAction: agentAction('run-package-tests', report.packageName ?? 'package')
     })
   }
 
@@ -856,7 +878,8 @@ function generateMigrationHints(report) {
       sourceType: 'tool-limitation',
       sourceUrl: null,
       disclaimer: '0.1 cannot safely probe partial workspace graphs.',
-      nextStep: 'Run the static report at the workspace root and probe standalone packages separately.'
+      nextStep: 'Run the static report at the workspace root and probe standalone packages separately.',
+      agentAction: agentAction('inspect-workspace-scope', report.projectShape.kind)
     })
   }
 
@@ -872,7 +895,8 @@ function generateMigrationHints(report) {
       sourceType: 'local-build-output',
       sourceUrl: null,
       disclaimer: 'Fix the baseline before attributing failures to Vite 8.',
-      nextStep: 'Repair the current build, then rerun with --probe-vite8 --allow-install.'
+      nextStep: 'Repair the current build, then rerun with --probe-vite8 --allow-install.',
+      agentAction: agentAction('fix-current-build', 'baseline')
     })
   }
 
@@ -888,7 +912,8 @@ function generateMigrationHints(report) {
       sourceType: 'tool-limitation',
       sourceUrl: null,
       disclaimer: 'Disabled until lifecycle-script suppression is implemented safely.',
-      nextStep: 'Use the static report, or run an isolated manual Vite 8 branch for Yarn projects.'
+      nextStep: 'Use the static report, or run an isolated manual Vite 8 branch for Yarn projects.',
+      agentAction: agentAction('create-manual-vite8-branch', 'yarn-project', true)
     })
   }
 
@@ -901,7 +926,8 @@ function generateMigrationHints(report) {
       sourceType: 'local-build-output',
       sourceUrl: null,
       disclaimer: 'This may be a real Vite 8 migration failure or a temp-copy/install artifact; do not treat it as proof by itself.',
-      nextStep: 'Check the temporary install output, package manager config, and whether the same failure reproduces on a normal Vite 8 branch.'
+      nextStep: 'Check the temporary install output, package manager config, and whether the same failure reproduces on a normal Vite 8 branch.',
+      agentAction: agentAction('verify-temp-copy-failure', report.probe.tempCopyRisk.dependency)
     })
   }
 
@@ -915,11 +941,54 @@ function generateMigrationHints(report) {
       sourceType: 'local-build-output',
       sourceUrl: null,
       disclaimer: 'Build output warning only; inspect chunking before changing config.',
-      nextStep: 'Review the asset delta and decide whether manual chunking or lazy loading needs adjustment.'
+      nextStep: 'Review the asset delta and decide whether manual chunking or lazy loading needs adjustment.',
+      agentAction: agentAction('inspect-build-warning', 'large-chunk')
     })
   }
 
   return hints
+}
+
+function agentAction(kind, target, requiresHuman = false) {
+  return {
+    kind,
+    target,
+    requiresHuman,
+    autoFixSafe: false
+  }
+}
+
+function summarizeReport(report) {
+  const hints = report.migrationHints ?? []
+  const probeClassification = report.probe?.classification ?? null
+  const blockingClassifications = new Set(['baseline-broken', 'vite8-build-failed'])
+  const status = probeClassification && blockingClassifications.has(probeClassification)
+    ? probeClassification
+    : hints.length > 0 || report.risks.length > 0
+      ? 'needs-review'
+      : 'no-action'
+  const confidence = report.probe
+    ? probeClassification === 'probe-inconclusive' || report.probe.tempCopyRisk
+      ? 'medium'
+      : 'high'
+    : 'low'
+
+  return {
+    status,
+    confidence,
+    probeClassification,
+    riskCount: report.risks.length,
+    pluginCount: report.plugins.length,
+    hintCount: hints.length,
+    autoFixSafe: false,
+    recommendedActions: hints
+      .filter(hint => hint.agentAction)
+      .slice(0, 5)
+      .map(hint => ({
+        hintId: hint.id,
+        ...hint.agentAction
+      }))
+  }
 }
 
 function hasFormalizedRisk(report) {
@@ -1287,6 +1356,12 @@ function main() {
     report.probe = runProbe(report, options)
   }
   report.migrationHints = generateMigrationHints(report)
+  report.summary = summarizeReport(report)
+  report.agentGuidance = {
+    intendedUse: ['triage', 'issue-drafting', 'migration-planning'],
+    notFor: ['automatic-config-edits', 'compatibility-proof'],
+    autoFixSafe: false
+  }
 
   if (options.report === 'json') {
     console.log(JSON.stringify(report, null, 2))

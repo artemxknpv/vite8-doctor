@@ -51,6 +51,8 @@ test('unknown flag exits without a stack trace', () => {
 
 test('reports config risk and line evidence', () => {
   const report = json(['fixtures/vite-basic'])
+  assert.equal(report.schemaVersion, 1)
+  assert.deepEqual(report.tool, { name: 'vite8-doctor', version: '0.1.0' })
   assert.equal(report.projectShape.kind, 'standalone')
   assert.equal(report.risks[0].id, 'optimize-deps')
   assert.equal(report.risks[0].evidence.line, 6)
@@ -62,6 +64,13 @@ test('reports config risk and line evidence', () => {
   assert.equal(report.environment.packageName, 'vite-basic-fixture')
   assert.equal(report.environment.projectShape, 'standalone')
   assert.deepEqual(report.migrationHints.map(hint => hint.id), ['optimize-deps'])
+  assert.equal(report.migrationHints[0].agentAction.kind, 'run-focused-tests')
+  assert.equal(report.migrationHints[0].agentAction.autoFixSafe, false)
+  assert.equal(report.summary.status, 'needs-review')
+  assert.equal(report.summary.confidence, 'low')
+  assert.deepEqual(report.summary.recommendedActions.map(action => action.hintId), ['optimize-deps'])
+  assert.equal(report.agentGuidance.autoFixSafe, false)
+  assert.ok(report.agentGuidance.notFor.includes('automatic-config-edits'))
 })
 
 test('--report json matches --json alias', () => {
@@ -91,6 +100,8 @@ test('prints a paste-ready GitHub report', () => {
 test('classifies baseline build failure separately', () => {
   const report = json(['fixtures/vite-baseline-broken', '--probe-build'])
   assert.equal(report.probe.classification, 'baseline-broken')
+  assert.equal(report.summary.status, 'baseline-broken')
+  assert.equal(report.summary.confidence, 'high')
   assert.equal(report.probe.current.ok, false)
   assert.match(report.probe.current.output, /fixture build failed/)
   assert.equal(report.migrationHints.find(hint => hint.id === 'baseline-broken').sourceType, 'local-build-output')
@@ -235,9 +246,13 @@ test('flags missing declared dependencies from the temporary Vite 8 copy as cali
     assert.equal(result.status, 0, result.stderr)
     const report = JSON.parse(result.stdout)
     assert.equal(report.probe.classification, 'vite8-build-failed')
+    assert.equal(report.summary.status, 'vite8-build-failed')
+    assert.equal(report.summary.confidence, 'medium')
     assert.equal(report.probe.tempCopyRisk.dependency, 'declared-missing')
     const hint = report.migrationHints.find(candidate => candidate.id === 'temp-copy-install-risk')
     assert.equal(hint.sourceType, 'local-build-output')
+    assert.equal(hint.agentAction.kind, 'verify-temp-copy-failure')
+    assert.equal(hint.agentAction.target, 'declared-missing')
     assert.match(hint.disclaimer, /temp-copy\/install artifact/)
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true })
