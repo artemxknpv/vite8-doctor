@@ -10,7 +10,7 @@ The contract is additive within a schema version: new fields may appear, but doc
 - `tool`: tool metadata with `name` and `version`.
 - `summary`: compact machine-oriented triage summary.
 - `agentGuidance`: safe-use boundary for automated consumers.
-- `projectRoot`, `packageName`, `packageManager`, `viteRange`, `configPath`, `projectShape`: inspected project metadata.
+- `projectRoot`, `packageName`, `packageManager`, `viteRange`, `configPath`, `configPaths`, `projectShape`: inspected project metadata.
 - `risks`: static config findings.
 - `plugins`: detected Vite plugin imports and package metadata.
 - `probe`: build-probe result when `--probe-build` is used; otherwise absent.

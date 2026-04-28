@@ -34,7 +34,9 @@ Real-project checks were run from `/Users/artem/stuff/oss/vite8-doctor-validatio
 - `oklch-picker`: already uses Vite 8, so it is only a report/probe smoke check, not Vite 7 to Vite 8 migration evidence.
 - `satnaing/astro-paper`: Astro project without a direct Vite dependency. This exposed that framework wrappers should not report `no-action`; they now produce a `framework-wrapper-scope` limitation.
 - `groq/groq-desktop-beta`: CommonJS `vite.config.cjs` with `require('@vitejs/plugin-react')`. This exposed a plugin inventory miss; CommonJS `require(...)` plugin imports are now detected.
+- `LeagueAkari/LeagueAkari`: Electron/Vite project with `electron.vite.config.ts` and no canonical `vite.config.*`. This exposed a false `no-action` static report; alternate root-level Vite config names are now scanned.
 - `dongweiming/lyanna`, `amperka/serial-projector`, and `buqiyuan/vite-vue3-lowcode`: older Vite apps using `@vitejs/plugin-legacy`, custom build targets, and Rollup output config. These validated that the newer hint contracts produce actionable next steps instead of a generic `needs-review`.
+- `buqiyuan/vite-vue3-lowcode`: also uses a loose `packageManager` value, `^pnpm@6.32.4`; package-manager detection now normalizes this to `pnpm` instead of falling through to the npm path.
 - `zhangyao1990/elegant-admin` and `kee-org/browser-addon`: projects with esbuild config and Rollup output customization. These validated the `esbuild-config` hint path on real configs.
 
 ## Current Confidence

@@ -105,6 +105,45 @@ test('detects CommonJS require plugin imports', () => {
   }
 })
 
+test('detects alternate root Vite config names', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vite8-doctor-alt-config-'))
+  try {
+    fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({
+      private: true,
+      devDependencies: {
+        vite: '^7.3.0',
+        '@vitejs/plugin-react': '^5.1.0'
+      }
+    }))
+    fs.writeFileSync(path.join(tmp, 'electron.vite.config.ts'), [
+      "import react from '@vitejs/plugin-react'",
+      'export default {',
+      '  build: {',
+      '    rollupOptions: {},',
+      '    target: "es2020"',
+      '  },',
+      '  plugins: [react()]',
+      '}'
+    ].join('\n'))
+    fs.mkdirSync(path.join(tmp, 'node_modules', '@vitejs', 'plugin-react'), { recursive: true })
+    fs.writeFileSync(path.join(tmp, 'node_modules', '@vitejs', 'plugin-react', 'package.json'), JSON.stringify({
+      name: '@vitejs/plugin-react',
+      version: '5.1.0',
+      peerDependencies: { vite: '^8.0.0' }
+    }))
+
+    const report = reportJson([tmp])
+    assert.equal(path.basename(report.configPath), 'electron.vite.config.ts')
+    assert.deepEqual(report.configPaths.map(config => path.basename(config)), ['electron.vite.config.ts'])
+    assert.equal(report.plugins[0].spec, '@vitejs/plugin-react')
+    assert.deepEqual(report.risks.map(risk => risk.id), ['rollup-options', 'build-target'])
+    assert.deepEqual(report.migrationHints.map(hint => hint.id), ['rollup-options', 'build-target'])
+    assert.equal(report.summary.status, 'needs-review')
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
 test('--report json matches --json alias', () => {
   const aliasReport = json(['fixtures/vite-basic'])
   const explicitReport = reportJson(['fixtures/vite-basic'])
@@ -206,6 +245,24 @@ test('detects workspace root instead of a clean standalone report', () => {
   assert.equal(report.projectShape.kind, 'workspace-root')
   assert.equal(report.projectShape.childPackageCount, 1)
   assert.equal(report.migrationHints.find(hint => hint.id === 'workspace-scope').sourceType, 'tool-limitation')
+})
+
+test('normalizes loose packageManager declarations', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vite8-doctor-package-manager-'))
+  try {
+    fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({
+      private: true,
+      packageManager: '^pnpm@6.32.4',
+      devDependencies: { vite: '^7.3.0' }
+    }))
+
+    const report = reportJson([tmp])
+    assert.equal(report.packageManagerRaw, '^pnpm@6.32.4')
+    assert.equal(report.packageManager, 'pnpm')
+    assert.equal(report.environment.packageManager, 'pnpm')
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
 })
 
 test('does not probe workspace child packages in 0.1', () => {

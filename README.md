@@ -64,7 +64,7 @@ npx vite8-doctor /path/to/project --probe-build --probe-vite8 --allow-install
 ## What It Checks
 
 - Vite version/range from `package.json`
-- nearest `vite.config.*`
+- root-level `vite.config.*` files, including alternate names such as `electron.vite.config.ts`
 - Vite plugin imports
 - installed plugin versions and `peerDependencies.vite`
 - migration-sensitive config such as `optimizeDeps`, `manualChunks`, `rollupOptions`, `esbuild`, `plugin-legacy`, and custom build targets

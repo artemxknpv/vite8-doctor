@@ -15,6 +15,7 @@ const CONFIG_NAMES = [
   'vite.config.cts',
   'vite.config.cjs'
 ]
+const VITE_CONFIG_FILE_RE = /(?:^|[.-])vite\.config(?:\.[A-Za-z0-9_-]+)?\.[cm]?[jt]s$/
 
 const RISK_PATTERNS = [
   {
@@ -141,11 +142,24 @@ function findUp(start, fileName) {
 }
 
 function findConfig(root) {
+  return findConfigs(root)[0] ?? null
+}
+
+function findConfigs(root) {
+  const configs = []
+  const seen = new Set()
   for (const name of CONFIG_NAMES) {
     const candidate = path.join(root, name)
-    if (fs.existsSync(candidate)) return candidate
+    if (fs.existsSync(candidate)) {
+      configs.push(candidate)
+      seen.add(path.basename(candidate))
+    }
   }
-  return null
+  for (const entry of fs.readdirSync(root, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    if (!entry.isFile() || seen.has(entry.name) || !VITE_CONFIG_FILE_RE.test(entry.name)) continue
+    configs.push(path.join(root, entry.name))
+  }
+  return configs
 }
 
 function hasOwnPackageJson(dir) {
@@ -221,7 +235,7 @@ function collectDeps(pkg) {
 
 function detectPackageManager(root, pkg) {
   if (pkg.packageManager) {
-    return pkg.packageManager.split('@')[0]
+    return normalizePackageManager(pkg.packageManager)
   }
   const workspacePackage = findPackageManagerDeclaration(root)
   if (workspacePackage) return workspacePackage
@@ -237,12 +251,18 @@ function findPackageManagerDeclaration(start) {
     const candidate = path.join(current, 'package.json')
     if (fs.existsSync(candidate)) {
       const pkg = readJson(candidate)
-      if (pkg.packageManager) return pkg.packageManager.split('@')[0]
+      if (pkg.packageManager) return normalizePackageManager(pkg.packageManager)
     }
     const parent = path.dirname(current)
     if (parent === current) return null
     current = parent
   }
+}
+
+function normalizePackageManager(raw) {
+  const value = String(raw).trim().replace(/^[^A-Za-z0-9]+/, '')
+  const match = /^(npm|pnpm|yarn|bun)(?:@|$)/.exec(value)
+  return match ? match[1] : value.split('@')[0]
 }
 
 function extractPluginImports(source) {
@@ -352,27 +372,37 @@ function analyze(root) {
   const frameworkWrappers = detectFrameworkWrappers(deps)
   const packageManager = detectPackageManager(projectRoot, pkg)
   const projectShape = detectProjectShape(projectRoot)
-  const configPath = findConfig(projectRoot)
-  const configSource = configPath ? fs.readFileSync(configPath, 'utf8') : ''
-  const pluginImports = configPath ? extractPluginImports(configSource) : []
+  const configPaths = findConfigs(projectRoot)
+  const configPath = configPaths[0] ?? null
+  const configSources = configPaths.map(file => ({ file, source: fs.readFileSync(file, 'utf8') }))
+  const pluginImportsBySpec = new Map()
+  for (const { file, source } of configSources) {
+    for (const pluginImport of extractPluginImports(source)) {
+      if (!pluginImportsBySpec.has(pluginImport.spec)) {
+        pluginImportsBySpec.set(pluginImport.spec, { ...pluginImport, file })
+      }
+    }
+  }
+  const pluginImports = [...pluginImportsBySpec.values()]
   const ownVitePeerRange = pkg.peerDependencies?.vite ?? null
 
   const risks = []
   for (const pattern of RISK_PATTERNS) {
-    const match = pattern.re.exec(configSource)
-    if (match) {
-      risks.push({
-        id: pattern.id,
-        level: pattern.level,
-        message: pattern.message,
-        evidence: configPath
-          ? { file: configPath, ...findSourceEvidence(configSource, match.index, match[0]) }
-          : null
-      })
+    for (const { file, source } of configSources) {
+      const match = pattern.re.exec(source)
+      if (match) {
+        risks.push({
+          id: pattern.id,
+          level: pattern.level,
+          message: pattern.message,
+          evidence: { file, ...findSourceEvidence(source, match.index, match[0]) }
+        })
+        break
+      }
     }
   }
 
-  const plugins = pluginImports.map(({ spec, evidence }) => {
+  const plugins = pluginImports.map(({ spec, file, evidence }) => {
     const installed = readInstalledPackage(projectRoot, spec)
     const peerRange = installed.pkg?.peerDependencies?.vite ?? null
     return {
@@ -383,7 +413,7 @@ function analyze(root) {
       packageJsonPath: installed.packageJsonPath,
       vitePeerRange: peerRange,
       vite8PeerSupported: vitePeerSupports8(peerRange),
-      evidence: configPath ? { file: configPath, ...evidence } : null
+      evidence: { file, ...evidence }
     }
   })
 
@@ -403,6 +433,7 @@ function analyze(root) {
     ownVitePeerRange,
     ownVite8PeerSupported: vitePeerSupports8(ownVitePeerRange),
     configPath,
+    configPaths,
     projectShape,
     environment: {
       nodeVersion: process.version,
@@ -416,6 +447,7 @@ function analyze(root) {
       ownVitePeerRange,
       projectRoot,
       configPath,
+      configPaths,
       projectShape: projectShape.kind
     },
     risks,
