@@ -33,6 +33,9 @@ Real-project checks were run from `/Users/artem/stuff/oss/vite8-doctor-validatio
 - `vitepress`, `vinext`, and related plugin repositories: useful as workspace/project-shape smoke checks, not as full compatibility proof.
 - `oklch-picker`: already uses Vite 8, so it is only a report/probe smoke check, not Vite 7 to Vite 8 migration evidence.
 - `satnaing/astro-paper`: Astro project without a direct Vite dependency. This exposed that framework wrappers should not report `no-action`; they now produce a `framework-wrapper-scope` limitation.
+- `groq/groq-desktop-beta`: CommonJS `vite.config.cjs` with `require('@vitejs/plugin-react')`. This exposed a plugin inventory miss; CommonJS `require(...)` plugin imports are now detected.
+- `dongweiming/lyanna`, `amperka/serial-projector`, and `buqiyuan/vite-vue3-lowcode`: older Vite apps using `@vitejs/plugin-legacy`, custom build targets, and Rollup output config. These validated that the newer hint contracts produce actionable next steps instead of a generic `needs-review`.
+- `zhangyao1990/elegant-admin` and `kee-org/browser-addon`: projects with esbuild config and Rollup output customization. These validated the `esbuild-config` hint path on real configs.
 
 ## Current Confidence
 
@@ -44,7 +47,7 @@ The confidence boundary is explicit:
 - It does not safely probe partial workspaces in `0.1`.
 - It does not treat missing dependency output from a temp copy as proof by itself.
 - It does not treat generic temporary Vite 8 build failures as high-confidence migration proof.
-- It does not fully inventory plugins wired through CommonJS `require(...)` in `vite.config.cjs`.
+- It can miss plugins loaded dynamically rather than through static ESM imports or CommonJS `require(...)`.
 - It depends on the project's own tests for final migration confidence.
 
 The next confidence step is not more static rules by default. It is broader validation on real Vite 7 projects with known Vite 8 migration outcomes.

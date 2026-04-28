@@ -168,7 +168,7 @@ project shape: standalone
 - Frameworks that wrap Vite without a direct Vite dependency or `vite.config.*` are outside `0.1`'s direct migration scope.
 - A missing dependency in the temporary Vite 8 copy can be a temp install artifact. Reproduce it on a normal branch before treating it as a migration failure.
 - A temporary Vite 8 build failure is not proof by itself because the temp copy installs with lifecycle scripts disabled.
-- CommonJS `require(...)` plugin detection is limited in `0.1`; use JSON output as a triage signal, not a complete plugin inventory.
+- Plugin detection covers common ESM imports and CommonJS `require(...)` calls, but it is still a static scan. Dynamic plugin loading can be missed.
 - AI agents should use JSON output for triage, issue drafting, and migration planning. They should not automatically edit config or dependencies based only on `vite8-doctor` hints.
 - Runtime correctness still requires the project's own tests.
 - Workspace-aware temp probes are not supported in `0.1`.

@@ -73,6 +73,38 @@ test('reports config risk and line evidence', () => {
   assert.ok(report.agentGuidance.notFor.includes('automatic-config-edits'))
 })
 
+test('detects CommonJS require plugin imports', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vite8-doctor-cjs-plugin-'))
+  try {
+    fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({
+      private: true,
+      devDependencies: {
+        vite: '^7.3.0',
+        '@vitejs/plugin-react': '^5.1.0'
+      }
+    }))
+    fs.writeFileSync(path.join(tmp, 'vite.config.cjs'), [
+      "const { defineConfig } = require('vite')",
+      "const react = require('@vitejs/plugin-react')",
+      'module.exports = defineConfig({ plugins: [react()] })'
+    ].join('\n'))
+    fs.mkdirSync(path.join(tmp, 'node_modules', '@vitejs', 'plugin-react'), { recursive: true })
+    fs.writeFileSync(path.join(tmp, 'node_modules', '@vitejs', 'plugin-react', 'package.json'), JSON.stringify({
+      name: '@vitejs/plugin-react',
+      version: '5.1.0',
+      peerDependencies: { vite: '^8.0.0' }
+    }))
+
+    const report = reportJson([tmp])
+    assert.equal(report.plugins.length, 1)
+    assert.equal(report.plugins[0].spec, '@vitejs/plugin-react')
+    assert.equal(report.plugins[0].vite8PeerSupported, true)
+    assert.equal(report.plugins[0].evidence.line, 2)
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
 test('--report json matches --json alias', () => {
   const aliasReport = json(['fixtures/vite-basic'])
   const explicitReport = reportJson(['fixtures/vite-basic'])

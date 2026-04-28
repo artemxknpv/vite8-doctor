@@ -247,10 +247,10 @@ function findPackageManagerDeclaration(start) {
 
 function extractPluginImports(source) {
   const plugins = new Map()
-  const importRe = /from\s+['"]([^'"]+)['"]/g
+  const importRe = /from\s+['"]([^'"]+)['"]|require\(\s*['"]([^'"]+)['"]\s*\)/g
   let match
   while ((match = importRe.exec(source))) {
-    const spec = match[1]
+    const spec = match[1] ?? match[2]
     if (
       spec === '@tailwindcss/vite' ||
       spec === '@react-router/dev/vite' ||
