@@ -6,6 +6,12 @@ Check a Vite app before moving it to Vite 8 / Rolldown.
 
 It does not prove that an app is compatible. It gives you a short report with evidence.
 
+```sh
+npx vite8-doctor . --probe-build --report json
+```
+
+Use the JSON output for CI scripts, issue triage, and AI coding agents. Use `--probe-vite8 --allow-install` only when dependency installs in a temporary copy are acceptable.
+
 ## Skip This README
 
 If you are using an AI coding agent, give it this:
