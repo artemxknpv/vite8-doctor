@@ -1324,20 +1324,21 @@ function collectBuildWarnings(report) {
 }
 
 function renderMarkdown(report) {
+  const context = displayContext(report)
   const lines = []
   lines.push(`# vite8-doctor report`)
   lines.push('')
   lines.push(`project: ${report.packageName ?? '(unnamed)'}`)
-  lines.push(`root: ${report.projectRoot}`)
+  lines.push(`root: ${displayPath(context, report.projectRoot)}`)
   lines.push(`node: ${report.environment.nodeVersion} (${report.environment.platform}/${report.environment.arch})`)
   lines.push(`package manager: ${report.packageManager ?? '(not declared)'}`)
   lines.push(`package manager raw: ${report.packageManagerRaw ?? '(not declared)'}`)
   lines.push(`vite range: ${report.viteRange ?? '(not found)'}`)
-  lines.push(`config: ${report.configPath ?? '(not found)'}`)
-  lines.push(`project shape: ${renderProjectShape(report.projectShape)}`)
+  lines.push(`config: ${displayPath(context, report.configPath)}`)
+  lines.push(`project shape: ${renderProjectShape(report.projectShape, context)}`)
   lines.push('')
 
-  renderMigrationHints(lines, report.migrationHints ?? [])
+  renderMigrationHints(lines, report.migrationHints ?? [], '##', context)
   lines.push('')
 
   lines.push(`## config risks`)
@@ -1348,7 +1349,7 @@ function renderMarkdown(report) {
     for (const risk of report.risks) {
       lines.push(`- [${risk.level}] ${risk.id}: ${risk.message}`)
       if (risk.evidence) {
-        lines.push(`  evidence: ${risk.evidence.file}:${risk.evidence.line} \`${risk.evidence.snippet}\``)
+        lines.push(`  evidence: ${displayPath(context, risk.evidence.file)}:${risk.evidence.line} \`${risk.evidence.snippet}\``)
       }
     }
   }
@@ -1365,7 +1366,7 @@ function renderMarkdown(report) {
         `- ${plugin.spec}: ${metadata.version}, peer vite ${metadata.peerRange}; ${metadata.support}`
       )
       if (plugin.evidence) {
-        lines.push(`  evidence: ${plugin.evidence.file}:${plugin.evidence.line} \`${plugin.evidence.snippet}\``)
+        lines.push(`  evidence: ${displayPath(context, plugin.evidence.file)}:${plugin.evidence.line} \`${plugin.evidence.snippet}\``)
       }
       if (plugin.vite8PeerSupported === false) {
         lines.push('  note: peer metadata can lag behind actual compatibility; this is a review signal, not proof of breakage.')
@@ -1379,25 +1380,26 @@ function renderMarkdown(report) {
     lines.push('- run with `--probe-build` to execute the current Vite build into a temporary outDir')
     lines.push('- add `--probe-vite8 --allow-install` to compare against Vite 8 in a temporary project copy')
   } else {
-    renderProbe(lines, report.probe)
+    renderProbe(lines, report.probe, '###', context)
   }
 
   return `${lines.join('\n')}\n`
 }
 
 function renderGitHubReport(report) {
+  const context = displayContext(report)
   const lines = []
   lines.push(`## vite8-doctor report`)
   lines.push('')
   lines.push(`### Environment`)
   lines.push(`- package: ${report.packageName ?? '(unnamed)'}`)
-  lines.push(`- root: ${report.projectRoot}`)
+  lines.push(`- root: ${displayPath(context, report.projectRoot)}`)
   lines.push(`- node: ${report.environment.nodeVersion}`)
   lines.push(`- platform: ${report.environment.platform}/${report.environment.arch}`)
   lines.push(`- package manager: ${report.packageManager ?? '(not declared)'} (${report.packageManagerRaw ?? 'no packageManager field'})`)
   lines.push(`- vite range: ${report.viteRange ?? '(not found)'}`)
-  lines.push(`- config: ${report.configPath ?? '(not found)'}`)
-  lines.push(`- project shape: ${renderProjectShape(report.projectShape)}`)
+  lines.push(`- config: ${displayPath(context, report.configPath)}`)
+  lines.push(`- project shape: ${renderProjectShape(report.projectShape, context)}`)
   lines.push('')
 
   lines.push(`### Summary`)
@@ -1408,7 +1410,7 @@ function renderGitHubReport(report) {
   if (report.probe) lines.push(`- probe classification: ${report.probe.classification}`)
   lines.push('')
 
-  renderMigrationHints(lines, report.migrationHints ?? [], '###')
+  renderMigrationHints(lines, report.migrationHints ?? [], '###', context)
   lines.push('')
 
   lines.push(`### Config risks`)
@@ -1417,7 +1419,7 @@ function renderGitHubReport(report) {
   } else {
     for (const risk of report.risks) {
       lines.push(`- [${risk.level}] ${risk.id}: ${risk.message}`)
-      if (risk.evidence) lines.push(`  - evidence: ${risk.evidence.file}:${risk.evidence.line} \`${risk.evidence.snippet}\``)
+      if (risk.evidence) lines.push(`  - evidence: ${displayPath(context, risk.evidence.file)}:${risk.evidence.line} \`${risk.evidence.snippet}\``)
     }
   }
   lines.push('')
@@ -1437,7 +1439,7 @@ function renderGitHubReport(report) {
   if (!report.probe) {
     lines.push('- not run')
   } else {
-    renderProbe(lines, report.probe, '####')
+    renderProbe(lines, report.probe, '####', context)
   }
 
   return `${lines.join('\n')}\n`
@@ -1461,7 +1463,7 @@ function renderPluginMetadata(plugin) {
   return { version, peerRange, support }
 }
 
-function renderMigrationHints(lines, hints, heading = '##') {
+function renderMigrationHints(lines, hints, heading = '##', context = null) {
   lines.push(`${heading} migration hints`)
   if (hints.length === 0) {
     lines.push('none detected')
@@ -1471,7 +1473,7 @@ function renderMigrationHints(lines, hints, heading = '##') {
     lines.push(`- ${hint.id}: ${hint.title}`)
     lines.push(`  trigger: ${hint.trigger}`)
     lines.push(`  source: ${renderHintSource(hint)}`)
-    lines.push(`  evidence: ${formatHintEvidence(hint.evidence)}`)
+    lines.push(`  evidence: ${formatHintEvidence(hint.evidence, context)}`)
     lines.push(`  note: ${hint.disclaimer}`)
     lines.push(`  next: ${hint.nextStep}`)
   }
@@ -1482,42 +1484,42 @@ function renderHintSource(hint) {
   return hint.sourceType
 }
 
-function formatHintEvidence(evidence) {
+function formatHintEvidence(evidence, context = null) {
   if (!evidence) return '(none)'
-  if (evidence.file) return `${evidence.file}:${evidence.line} \`${evidence.snippet}\``
+  if (evidence.file) return `${displayPath(context, evidence.file)}:${evidence.line} \`${evidence.snippet}\``
   if (evidence.configLimitations) {
     return evidence.configLimitations
-      .map(limitation => `${limitation.evidence.file}:${limitation.evidence.line} \`${limitation.evidence.snippet}\``)
+      .map(limitation => `${displayPath(context, limitation.evidence.file)}:${limitation.evidence.line} \`${limitation.evidence.snippet}\``)
       .join(' | ')
   }
   if (evidence.frameworkWrappers) return evidence.frameworkWrappers.map(framework => `${framework.label} ${framework.range}`).join(', ')
   if (evidence.packageName && evidence.vitePeerRange) return `${evidence.packageName} peer vite ${evidence.vitePeerRange}`
-  if (evidence.packageJsonPath) return `${evidence.spec} peer vite ${evidence.vitePeerRange} in ${evidence.packageJsonPath}`
+  if (evidence.packageJsonPath) return `${evidence.spec} peer vite ${evidence.vitePeerRange} in ${displayPath(context, evidence.packageJsonPath)}`
   if (evidence.metadataStatus) return `${evidence.spec} metadata status: ${evidence.metadataStatus}`
   if (evidence.dependency) return `${evidence.id}: ${evidence.dependency}`
-  if (evidence.warnings) return evidence.warnings.join(' | ')
-  if (evidence.command) return `${evidence.command} exited ${evidence.exitCode}`
+  if (evidence.warnings) return evidence.warnings.map(warning => sanitizeDisplayText(context, warning)).join(' | ')
+  if (evidence.command) return `${sanitizeDisplayText(context, evidence.command)} exited ${evidence.exitCode}`
   if (evidence.kind === 'workspace-root') return `workspace-root with ${evidence.childPackageCount} child package${evidence.childPackageCount === 1 ? '' : 's'}`
-  if (evidence.kind === 'workspace-child') return `workspace-child under ${evidence.workspaceRoot}`
-  if (evidence.packageManager) return `${evidence.packageManager}: ${oneLine(evidence.output ?? '')}`
-  return oneLine(JSON.stringify(evidence))
+  if (evidence.kind === 'workspace-child') return `workspace-child under ${displayPath(context, evidence.workspaceRoot)}`
+  if (evidence.packageManager) return `${evidence.packageManager}: ${oneLine(sanitizeDisplayText(context, evidence.output ?? ''))}`
+  return oneLine(sanitizeDisplayText(context, JSON.stringify(evidence)))
 }
 
-function renderProbe(lines, probe, subheading = '###') {
+function renderProbe(lines, probe, subheading = '###', context = null) {
   lines.push(`classification: ${probe.classification}`)
-  lines.push(`temp: ${probe.cleanup === 'kept' ? probe.tempRoot : '(removed)'}`)
+  lines.push(`temp: ${probe.cleanup === 'kept' ? displayPath(context, probe.tempRoot) : '(removed)'}`)
   lines.push('')
   lines.push(`${subheading} current build`)
-  renderBuild(lines, probe.current)
+  renderBuild(lines, probe.current, context)
   if (probe.vite8) {
     lines.push('')
     lines.push(`${subheading} vite 8 build`)
     if (probe.vite8.skipped) {
       lines.push(`skipped: ${probe.vite8.reason}`)
     } else {
-      lines.push(`install: ${probe.vite8.install.ok ? 'passed' : 'failed'} (${probe.vite8.install.command})`)
-      if (probe.vite8.install.output) lines.push(`install output: ${oneLine(probe.vite8.install.output)}`)
-      if (probe.vite8.build) renderBuild(lines, probe.vite8.build)
+      lines.push(`install: ${probe.vite8.install.ok ? 'passed' : 'failed'} (${sanitizeDisplayText(context, probe.vite8.install.command ?? '(not available)')})`)
+      if (probe.vite8.install.output) lines.push(`install output: ${oneLine(sanitizeDisplayText(context, probe.vite8.install.output))}`)
+      if (probe.vite8.build) renderBuild(lines, probe.vite8.build, context)
     }
   }
   if (probe.assetDelta) {
@@ -1527,20 +1529,20 @@ function renderProbe(lines, probe, subheading = '###') {
   }
 }
 
-function renderBuild(lines, build) {
+function renderBuild(lines, build, context = null) {
   lines.push(`status: ${build.ok ? 'passed' : 'failed'}`)
-  if (build.skipped && build.reason) lines.push(`reason: ${build.reason}`)
-  lines.push(`command: ${build.command ?? '(not available)'}`)
+  if (build.skipped && build.reason) lines.push(`reason: ${sanitizeDisplayText(context, build.reason)}`)
+  lines.push(`command: ${sanitizeDisplayText(context, build.command ?? '(not available)')}`)
   lines.push(`exit: ${build.exitCode ?? '(none)'}${build.timedOut ? ' (timed out)' : ''}`)
   lines.push(`assets: ${build.assets.count} files, ${formatBytes(build.assets.totalBytes)}`)
   if (build.warnings.length) {
     lines.push('warnings:')
-    for (const warning of build.warnings) lines.push(`- ${warning}`)
+    for (const warning of build.warnings) lines.push(`- ${sanitizeDisplayText(context, warning)}`)
   }
   if (!build.ok && build.output) {
     lines.push('output:')
     lines.push('```')
-    lines.push(build.output)
+    lines.push(sanitizeDisplayText(context, build.output))
     lines.push('```')
   }
 }
@@ -1569,15 +1571,58 @@ function signed(value) {
   return value > 0 ? `+${value}` : `${value}`
 }
 
-function renderProjectShape(projectShape) {
+function renderProjectShape(projectShape, context = null) {
   if (!projectShape) return 'unknown'
   if (projectShape.kind === 'workspace-root') {
     return `workspace-root (${projectShape.childPackageCount} child package${projectShape.childPackageCount === 1 ? '' : 's'} detected)`
   }
   if (projectShape.kind === 'workspace-child') {
-    return `workspace-child (root: ${projectShape.workspaceRoot})`
+    return `workspace-child (root: ${displayPath(context, projectShape.workspaceRoot)})`
   }
   return projectShape.kind
+}
+
+function displayContext(report) {
+  return {
+    projectRoot: report.projectRoot ? path.resolve(report.projectRoot) : null,
+    tempRoot: report.probe?.tempRoot ? path.resolve(report.probe.tempRoot) : null
+  }
+}
+
+function displayPath(context, value) {
+  if (!value) return '(not found)'
+  const text = String(value)
+  if (!context || !path.isAbsolute(text)) return text
+  const normalized = path.resolve(text)
+  if (context.projectRoot && isPathInside(normalized, context.projectRoot)) {
+    const relative = path.relative(context.projectRoot, normalized)
+    return relative ? relative : '.'
+  }
+  if (context.tempRoot && isPathInside(normalized, context.tempRoot)) {
+    const relative = path.relative(context.tempRoot, normalized)
+    return relative ? path.join('<temp>', relative) : '<temp>'
+  }
+  return path.basename(normalized)
+}
+
+function sanitizeDisplayText(context, value) {
+  if (value == null) return ''
+  let text = String(value)
+  if (!context) return text
+  const replacements = [
+    [context.projectRoot, '.'],
+    [context.tempRoot, '<temp>']
+  ].filter(([from]) => from)
+
+  for (const [from, to] of replacements) {
+    text = text.split(from).join(to)
+  }
+  return text
+}
+
+function isPathInside(candidate, root) {
+  const relative = path.relative(root, candidate)
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
 }
 
 function oneLine(text) {

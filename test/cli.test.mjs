@@ -35,6 +35,10 @@ function writeExecutable(file, source) {
   fs.chmodSync(file, 0o755)
 }
 
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 test('prints help', () => {
   const result = run(['--help'])
   assert.equal(result.status, 0)
@@ -579,6 +583,17 @@ test('human reports render structured local evidence for hints', () => {
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, /source: package-metadata/)
   assert.match(result.stdout, /evidence: vite-plugin-v7-only peer vite \^7\.0\.0 in /)
+})
+
+test('GitHub report sanitizes local and temporary paths', () => {
+  const fixtureRoot = path.join(repoRoot, 'fixtures', 'vite-dual-build')
+  const result = run(['fixtures/vite-dual-build', '--probe-build', '--probe-vite8', '--allow-install', '--report', 'github'])
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /- root: \./)
+  assert.match(result.stdout, /command: \.\/node_modules\/\.bin\/vite build --outDir <temp>\/current/)
+  assert.match(result.stdout, /command: <temp>\/project\/node_modules\/\.bin\/vite build --outDir <temp>\/vite8/)
+  assert.doesNotMatch(result.stdout, new RegExp(escapeRegExp(fixtureRoot)))
+  assert.doesNotMatch(result.stdout, new RegExp(escapeRegExp(os.tmpdir())))
 })
 
 test('reports Vite 8 asset delta with relative paths', () => {

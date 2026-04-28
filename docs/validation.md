@@ -15,11 +15,11 @@ The fixture suite covers the stable behavior contract:
 - `fixtures/workspace-root`: reports workspace root/child scope and avoids unsafe partial workspace probes.
 - `fixtures/yarn-app`: rejects temporary Vite 8 comparison for Yarn in `0.1`.
 
-Extra generated cases under `/Users/artem/stuff/oss/vite8-doctor-validation/generated` were used for smoke coverage around React/Vue-style apps, baseline failures, workspace shape, and Yarn projects.
+Extra generated cases in a local validation workspace were used for smoke coverage around React/Vue-style apps, baseline failures, workspace shape, and Yarn projects.
 
 ## Real OSS Smoke Checks
 
-Real-project checks were run from `/Users/artem/stuff/oss/vite8-doctor-validation/real-oss`.
+Real-project checks were run from temporary local checkouts.
 
 - `electron-vite-react`: current build passed. The report found `rollupOptions`, `@vitejs/plugin-react` peer metadata that stops before Vite 8, and a temporary Vite 8 failure on declared `vite-plugin-electron-renderer`. That exposed the need for a calibration hint instead of treating the output as clean migration proof.
 - `electron-vite-vue`: same class of Electron/Vite app smoke check. Useful for checking report shape and probe behavior on a small real app.
