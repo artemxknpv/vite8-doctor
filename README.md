@@ -97,6 +97,7 @@ Hints are prompts for review. They are not compatibility guarantees.
 - current build failures
 - disabled Yarn Vite 8 comparison
 - missing declared dependencies in the temporary Vite 8 copy
+- warnings introduced by the temporary Vite 8 build
 - Vite large chunk warnings
 
 External migration hints link to Vite docs. Local hints cite package metadata, build output, or tool limitations.

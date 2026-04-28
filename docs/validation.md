@@ -23,6 +23,7 @@ Real-project checks were run from `/Users/artem/stuff/oss/vite8-doctor-validatio
 
 - `electron-vite-react`: current build passed. The report found `rollupOptions`, `@vitejs/plugin-react` peer metadata that stops before Vite 8, and a temporary Vite 8 failure on declared `vite-plugin-electron-renderer`. That exposed the need for a calibration hint instead of treating the output as clean migration proof.
 - `electron-vite-vue`: same class of Electron/Vite app smoke check. Useful for checking report shape and probe behavior on a small real app.
+- `vite-react-boilerplate`: standalone React app on Vite 7.2.6. Current and temporary Vite 8 builds passed, but Vite 8 introduced a `vite:react-swc` warning. This exposed the need for a `vite8-new-warning` hint instead of reporting `no-action`.
 - `vite-plugin-pwa`: package-level peer metadata does not declare Vite 8 support, which validates the package peer metadata signal for plugin/library packages.
 - `vitepress`, `vinext`, and related plugin repositories: useful as workspace/project-shape smoke checks, not as full compatibility proof.
 - `oklch-picker`: already uses Vite 8, so it is only a report/probe smoke check, not Vite 7 to Vite 8 migration evidence.

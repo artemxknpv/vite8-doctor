@@ -931,6 +931,21 @@ function generateMigrationHints(report) {
     })
   }
 
+  const newVite8Warnings = collectNewVite8Warnings(report)
+  if (newVite8Warnings.length) {
+    hints.push({
+      id: 'vite8-new-warning',
+      title: 'Vite 8 build introduced new warnings',
+      trigger: 'temporary Vite 8 build emitted warnings not seen in the current build',
+      evidence: { warnings: newVite8Warnings.slice(0, 5) },
+      sourceType: 'local-build-output',
+      sourceUrl: null,
+      disclaimer: 'Build output warning only; inspect the warning before changing config.',
+      nextStep: 'Review the new Vite 8 warnings and decide whether they need config, plugin, or dependency follow-up.',
+      agentAction: agentAction('inspect-build-warning', 'vite8-new-warning')
+    })
+  }
+
   const largeChunkWarnings = collectBuildWarnings(report).filter(warning => LARGE_CHUNK_RE.test(warning))
   if (largeChunkWarnings.length) {
     hints.push({
@@ -947,6 +962,16 @@ function generateMigrationHints(report) {
   }
 
   return hints
+}
+
+function collectNewVite8Warnings(report) {
+  const currentWarnings = new Set((report.probe?.current?.warnings ?? []).map(normalizeWarning))
+  return (report.probe?.vite8?.build?.warnings ?? [])
+    .filter(warning => !currentWarnings.has(normalizeWarning(warning)))
+}
+
+function normalizeWarning(warning) {
+  return warning.replace(/\u001b\[[0-9;]*m/g, '').replace(/\s+/g, ' ').trim()
 }
 
 function agentAction(kind, target, requiresHuman = false) {
