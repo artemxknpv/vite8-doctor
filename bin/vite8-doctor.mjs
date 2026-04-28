@@ -58,6 +58,7 @@ const RISK_PATTERNS = [
     id: 'plugin-legacy',
     level: 'high',
     re: /@vitejs\/plugin-legacy|legacy\s*\(/m,
+    find: source => findLiteralMatch(source, '@vitejs/plugin-legacy'),
     message: '@vitejs/plugin-legacy is a known Vite 8 migration area.'
   },
   {
@@ -367,6 +368,11 @@ function findRiskMatch(pattern, source) {
   return match ? { index: match.index, text: match[0] } : null
 }
 
+function findLiteralMatch(source, literal) {
+  const index = source.indexOf(literal)
+  return index === -1 ? null : { index, text: literal }
+}
+
 function findBuildTarget(source) {
   const buildRe = /\bbuild\s*:/g
   let match
@@ -443,6 +449,35 @@ function findMatchingBrace(source, openIndex) {
   return -1
 }
 
+function detectConfigLimitations(file, source) {
+  const limitations = []
+  const checks = [
+    {
+      id: 'dynamic-config-loading',
+      re: /\bimport\s*\(/,
+      message: 'dynamic import() in Vite config can hide plugin metadata from static scanning.'
+    },
+    {
+      id: 'dynamic-config-loading',
+      re: /require\(\s*[^'"\s)]/,
+      message: 'non-literal require() in Vite config can hide plugin metadata from static scanning.'
+    }
+  ]
+
+  for (const check of checks) {
+    const match = check.re.exec(source)
+    if (match) {
+      limitations.push({
+        id: check.id,
+        message: check.message,
+        evidence: { file, ...findSourceEvidence(source, match.index, match[0]) }
+      })
+    }
+  }
+
+  return limitations
+}
+
 function analyze(root) {
   const pkgPath = findUp(root, 'package.json')
   if (!pkgPath) {
@@ -458,6 +493,7 @@ function analyze(root) {
   const configPaths = findConfigs(projectRoot)
   const configPath = configPaths[0] ?? null
   const configSources = configPaths.map(file => ({ file, source: fs.readFileSync(file, 'utf8') }))
+  const configLimitations = configSources.flatMap(({ file, source }) => detectConfigLimitations(file, source))
   const pluginImportsBySpec = new Map()
   for (const { file, source } of configSources) {
     for (const pluginImport of extractPluginImports(source)) {
@@ -517,6 +553,7 @@ function analyze(root) {
     ownVite8PeerSupported: vitePeerSupports8(ownVitePeerRange),
     configPath,
     configPaths,
+    configLimitations,
     projectShape,
     environment: {
       nodeVersion: process.version,
@@ -531,6 +568,7 @@ function analyze(root) {
       projectRoot,
       configPath,
       configPaths,
+      configLimitations,
       projectShape: projectShape.kind
     },
     risks,
@@ -731,14 +769,19 @@ function installVite8(root, packageManager, timeoutMs) {
     ? { cmd: 'pnpm', args: ['install', '--ignore-scripts', '--no-frozen-lockfile'] }
     : packageManager === 'yarn'
       ? null
-      : { cmd: 'npm', args: ['install', '--ignore-scripts'] }
+      : packageManager === 'npm'
+        ? { cmd: 'npm', args: ['install', '--ignore-scripts'] }
+        : null
   const addCommand = packageManager === 'pnpm'
     ? { cmd: 'pnpm', args: ['add', '-D', 'vite@8', '--ignore-scripts'] }
     : packageManager === 'yarn'
       ? null
-      : { cmd: 'npm', args: ['install', '-D', 'vite@8', '--ignore-scripts'] }
+      : packageManager === 'npm'
+        ? { cmd: 'npm', args: ['install', '-D', 'vite@8', '--ignore-scripts'] }
+        : null
 
   if (!installCommand || !addCommand) {
+    const managerLabel = packageManager === 'yarn' ? 'Yarn' : packageManager
     return {
       ok: false,
       step: 'unsupported-package-manager',
@@ -746,7 +789,7 @@ function installVite8(root, packageManager, timeoutMs) {
       exitCode: null,
       signal: null,
       timedOut: false,
-      output: 'Vite 8 comparison is disabled for Yarn in 0.1 because lifecycle-script suppression is not implemented safely.'
+      output: `Vite 8 comparison is disabled for ${managerLabel} in 0.1 because lifecycle-script suppression is not implemented safely.`
     }
   }
 
@@ -989,6 +1032,22 @@ function generateMigrationHints(report) {
     })
   }
 
+  if (report.configLimitations.some(limitation => limitation.id === 'dynamic-config-loading')) {
+    hints.push({
+      id: 'dynamic-config-loading',
+      title: 'Dynamic config loading needs manual inspection',
+      trigger: 'vite.config contains dynamic import() or non-literal require()',
+      evidence: {
+        configLimitations: report.configLimitations.filter(limitation => limitation.id === 'dynamic-config-loading')
+      },
+      sourceType: 'tool-limitation',
+      sourceUrl: null,
+      disclaimer: 'Static scanning may miss plugins loaded through dynamic config code.',
+      nextStep: 'Inspect the config manually, then rerun after dependencies are installed if plugin metadata matters.',
+      agentAction: agentAction('inspect-dynamic-config-loading', 'vite-config')
+    })
+  }
+
   if (!report.viteRange && report.frameworkWrappers.length) {
     hints.push({
       id: 'framework-wrapper-scope',
@@ -1103,6 +1162,26 @@ function generateMigrationHints(report) {
       disclaimer: 'Disabled until lifecycle-script suppression is implemented safely.',
       nextStep: 'Use the static report, or run an isolated manual Vite 8 branch for Yarn projects.',
       agentAction: agentAction('create-manual-vite8-branch', 'yarn-project', true)
+    })
+  }
+
+  if (
+    report.probe?.vite8?.install?.step === 'unsupported-package-manager' &&
+    report.packageManager !== 'yarn'
+  ) {
+    hints.push({
+      id: 'unsupported-package-manager',
+      title: `${report.packageManager} Vite 8 comparison is disabled`,
+      trigger: `${report.packageManager} project requested --probe-vite8 --allow-install`,
+      evidence: {
+        packageManager: report.packageManager,
+        output: report.probe.vite8.install.output
+      },
+      sourceType: 'tool-limitation',
+      sourceUrl: null,
+      disclaimer: 'Disabled until lifecycle-script suppression is implemented safely for this package manager.',
+      nextStep: 'Use the static report, or run an isolated manual Vite 8 branch with the project package manager.',
+      agentAction: agentAction('create-manual-vite8-branch', `${report.packageManager}-project`, true)
     })
   }
 
@@ -1406,6 +1485,11 @@ function renderHintSource(hint) {
 function formatHintEvidence(evidence) {
   if (!evidence) return '(none)'
   if (evidence.file) return `${evidence.file}:${evidence.line} \`${evidence.snippet}\``
+  if (evidence.configLimitations) {
+    return evidence.configLimitations
+      .map(limitation => `${limitation.evidence.file}:${limitation.evidence.line} \`${limitation.evidence.snippet}\``)
+      .join(' | ')
+  }
   if (evidence.frameworkWrappers) return evidence.frameworkWrappers.map(framework => `${framework.label} ${framework.range}`).join(', ')
   if (evidence.packageName && evidence.vitePeerRange) return `${evidence.packageName} peer vite ${evidence.vitePeerRange}`
   if (evidence.packageJsonPath) return `${evidence.spec} peer vite ${evidence.vitePeerRange} in ${evidence.packageJsonPath}`

@@ -95,9 +95,11 @@ Hints are prompts for review. They are not compatibility guarantees.
 - `esbuild`, `plugin-legacy`, and custom build targets
 - package and Vite plugin peer metadata that excludes Vite 8
 - unavailable plugin metadata when dependencies are missing
+- dynamic config-loading scope limits
 - framework-wrapper scope limits
 - workspace scope limits
 - current build failures
+- unsupported package managers for temporary Vite 8 comparison
 - disabled Yarn Vite 8 comparison
 - missing declared dependencies in the temporary Vite 8 copy
 - warnings introduced by the temporary Vite 8 build
@@ -129,7 +131,7 @@ Probe mode executes project build tooling. Use it only on projects you trust. It
 
 `--probe-vite8 --allow-install` copies the project to a temporary directory, skips `.git`, `.nx`, `node_modules`, `.omx`, `.tasks`, `.ai`, `.omc`, common build output, `.env*`, `.npmrc`, `.yarnrc*`, and `.pnpmfile.cjs`, then installs Vite 8 inside that copy.
 
-npm and pnpm installs use `--ignore-scripts`. Yarn Vite 8 comparison is rejected in `0.1` because lifecycle-script suppression is not handled safely yet.
+npm and pnpm installs use `--ignore-scripts`. Other package managers, including Yarn and Bun, are rejected in `0.1` because lifecycle-script suppression is not handled safely yet.
 
 Probe subprocesses run with a reduced environment. Known secret values from the parent environment are redacted from captured output, but project tooling can still print sensitive data from files it reads itself. Review reports before pasting them into public issues.
 
@@ -168,7 +170,7 @@ project shape: standalone
 - Frameworks that wrap Vite without a direct Vite dependency or `vite.config.*` are outside `0.1`'s direct migration scope.
 - A missing dependency in the temporary Vite 8 copy can be a temp install artifact. Reproduce it on a normal branch before treating it as a migration failure.
 - A temporary Vite 8 build failure is not proof by itself because the temp copy installs with lifecycle scripts disabled.
-- Plugin detection covers common ESM imports and CommonJS `require(...)` calls, but it is still a static scan. Dynamic plugin loading can be missed.
+- Plugin detection covers common ESM imports and CommonJS `require(...)` calls, but it is still a static scan. Dynamic plugin loading is reported as a scope limitation, not resolved automatically.
 - AI agents should use JSON output for triage, issue drafting, and migration planning. They should not automatically edit config or dependencies based only on `vite8-doctor` hints.
 - Runtime correctness still requires the project's own tests.
 - Workspace-aware temp probes are not supported in `0.1`.

@@ -105,6 +105,53 @@ test('detects CommonJS require plugin imports', () => {
   }
 })
 
+test('reports dynamic plugin loading as a scan limitation', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vite8-doctor-dynamic-plugin-'))
+  try {
+    fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({
+      private: true,
+      devDependencies: { vite: '^7.3.0' }
+    }))
+    fs.writeFileSync(path.join(tmp, 'vite.config.cjs'), [
+      "const pluginName = 'vite-plugin-generated'",
+      'const generated = require(pluginName)',
+      'module.exports = { plugins: [generated()] }'
+    ].join('\n'))
+
+    const report = reportJson([tmp])
+    assert.equal(report.plugins.length, 0)
+    assert.equal(report.configLimitations[0].id, 'dynamic-config-loading')
+    const hint = report.migrationHints.find(candidate => candidate.id === 'dynamic-config-loading')
+    assert.equal(hint.sourceType, 'tool-limitation')
+    assert.equal(hint.agentAction.kind, 'inspect-dynamic-config-loading')
+    assert.equal(report.summary.status, 'needs-review')
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
+test('does not report arbitrary legacy helpers as plugin-legacy', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vite8-doctor-legacy-helper-'))
+  try {
+    fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({
+      private: true,
+      type: 'module',
+      devDependencies: { vite: '^7.3.0' }
+    }))
+    fs.writeFileSync(path.join(tmp, 'vite.config.js'), [
+      'function legacy() { return null }',
+      'export default { plugins: [legacy()] }'
+    ].join('\n'))
+
+    const report = reportJson([tmp])
+    assert.equal(report.risks.some(risk => risk.id === 'plugin-legacy'), false)
+    assert.equal(report.migrationHints.some(hint => hint.id === 'plugin-legacy'), false)
+    assert.equal(report.summary.status, 'no-action')
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
 test('detects alternate root Vite config names', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vite8-doctor-alt-config-'))
   try {
@@ -288,6 +335,32 @@ test('rejects Yarn Vite 8 comparison in 0.1 safety model', () => {
   assert.equal(report.probe.vite8.install.step, 'unsupported-package-manager')
   assert.match(report.probe.vite8.install.output, /Yarn/)
   assert.equal(report.migrationHints.find(hint => hint.id === 'yarn-vite8-comparison').sourceType, 'tool-limitation')
+})
+
+test('rejects unsupported Vite 8 comparison package managers', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vite8-doctor-unsupported-pm-'))
+  try {
+    fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({
+      private: true,
+      packageManager: 'bun@1.1.0',
+      devDependencies: { vite: '^7.3.0' }
+    }))
+    writeExecutable(path.join(tmp, 'node_modules', '.bin', 'vite'), [
+      '#!/usr/bin/env sh',
+      'exit 0'
+    ].join('\n'))
+
+    const report = reportJson([tmp, '--probe-build', '--probe-vite8', '--allow-install'])
+    assert.equal(report.packageManager, 'bun')
+    assert.equal(report.probe.classification, 'probe-inconclusive')
+    assert.equal(report.probe.vite8.install.step, 'unsupported-package-manager')
+    assert.match(report.probe.vite8.install.output, /bun/)
+    const hint = report.migrationHints.find(candidate => candidate.id === 'unsupported-package-manager')
+    assert.equal(hint.sourceType, 'tool-limitation')
+    assert.equal(hint.agentAction.requiresHuman, true)
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
 })
 
 test('detects large chunk warnings from local build output', () => {
