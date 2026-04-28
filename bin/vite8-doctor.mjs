@@ -64,6 +64,7 @@ const RISK_PATTERNS = [
     id: 'build-target',
     level: 'medium',
     re: /target\s*:/m,
+    find: findBuildTarget,
     message: 'custom build targets should be checked after the Rolldown migration.'
   }
 ]
@@ -360,6 +361,88 @@ function findSourceEvidence(source, index, needle = '') {
   return { line, snippet, match: needle }
 }
 
+function findRiskMatch(pattern, source) {
+  if (pattern.find) return pattern.find(source)
+  const match = pattern.re.exec(source)
+  return match ? { index: match.index, text: match[0] } : null
+}
+
+function findBuildTarget(source) {
+  const buildRe = /\bbuild\s*:/g
+  let match
+  while ((match = buildRe.exec(source))) {
+    const openIndex = source.indexOf('{', buildRe.lastIndex)
+    if (openIndex === -1) continue
+    const closeIndex = findMatchingBrace(source, openIndex)
+    if (closeIndex === -1) continue
+    const block = source.slice(openIndex + 1, closeIndex)
+    const targetMatch = /\btarget\s*:/.exec(block)
+    if (targetMatch) {
+      return {
+        index: openIndex + 1 + targetMatch.index,
+        text: targetMatch[0]
+      }
+    }
+  }
+  return null
+}
+
+function findMatchingBrace(source, openIndex) {
+  let depth = 0
+  let quote = null
+  let escaped = false
+  let lineComment = false
+  let blockComment = false
+
+  for (let index = openIndex; index < source.length; index += 1) {
+    const char = source[index]
+    const next = source[index + 1]
+
+    if (lineComment) {
+      if (char === '\n') lineComment = false
+      continue
+    }
+    if (blockComment) {
+      if (char === '*' && next === '/') {
+        blockComment = false
+        index += 1
+      }
+      continue
+    }
+    if (quote) {
+      if (escaped) {
+        escaped = false
+      } else if (char === '\\') {
+        escaped = true
+      } else if (char === quote) {
+        quote = null
+      }
+      continue
+    }
+    if (char === '/' && next === '/') {
+      lineComment = true
+      index += 1
+      continue
+    }
+    if (char === '/' && next === '*') {
+      blockComment = true
+      index += 1
+      continue
+    }
+    if (char === '"' || char === '\'' || char === '`') {
+      quote = char
+      continue
+    }
+    if (char === '{') depth += 1
+    if (char === '}') {
+      depth -= 1
+      if (depth === 0) return index
+    }
+  }
+
+  return -1
+}
+
 function analyze(root) {
   const pkgPath = findUp(root, 'package.json')
   if (!pkgPath) {
@@ -389,13 +472,13 @@ function analyze(root) {
   const risks = []
   for (const pattern of RISK_PATTERNS) {
     for (const { file, source } of configSources) {
-      const match = pattern.re.exec(source)
+      const match = findRiskMatch(pattern, source)
       if (match) {
         risks.push({
           id: pattern.id,
           level: pattern.level,
           message: pattern.message,
-          evidence: { file, ...findSourceEvidence(source, match.index, match[0]) }
+          evidence: { file, ...findSourceEvidence(source, match.index, match.text) }
         })
         break
       }

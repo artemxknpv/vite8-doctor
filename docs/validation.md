@@ -37,6 +37,7 @@ Real-project checks were run from `/Users/artem/stuff/oss/vite8-doctor-validatio
 - `LeagueAkari/LeagueAkari`: Electron/Vite project with `electron.vite.config.ts` and no canonical `vite.config.*`. This exposed a false `no-action` static report; alternate root-level Vite config names are now scanned.
 - `dongweiming/lyanna`, `amperka/serial-projector`, and `buqiyuan/vite-vue3-lowcode`: older Vite apps using `@vitejs/plugin-legacy`, custom build targets, and Rollup output config. These validated that the newer hint contracts produce actionable next steps instead of a generic `needs-review`.
 - `buqiyuan/vite-vue3-lowcode`: also uses a loose `packageManager` value, `^pnpm@6.32.4`; package-manager detection now normalizes this to `pnpm` instead of falling through to the npm path.
+- Proxy-only `server.proxy.target` configs are covered by a regression test so they do not trigger the `build-target` migration hint.
 - `zhangyao1990/elegant-admin` and `kee-org/browser-addon`: projects with esbuild config and Rollup output customization. These validated the `esbuild-config` hint path on real configs.
 
 ## Current Confidence

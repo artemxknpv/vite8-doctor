@@ -455,6 +455,32 @@ test('custom build targets produce an actionable hint contract', () => {
   }
 })
 
+test('server proxy targets are not reported as build targets', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vite8-doctor-proxy-target-'))
+  try {
+    fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({
+      private: true,
+      type: 'module',
+      devDependencies: { vite: '^7.3.0' }
+    }))
+    fs.writeFileSync(path.join(tmp, 'vite.config.js'), [
+      'export default {',
+      '  server: {',
+      '    proxy: {',
+      '      "/api": { target: "http://localhost:3000" }',
+      '    }',
+      '  }',
+      '}'
+    ].join('\n'))
+    const report = reportJson([tmp])
+    assert.equal(report.risks.some(risk => risk.id === 'build-target'), false)
+    assert.equal(report.migrationHints.some(hint => hint.id === 'build-target'), false)
+    assert.equal(report.summary.status, 'no-action')
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
 test('framework wrappers without direct Vite dependency are scoped as limitations', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vite8-doctor-framework-wrapper-'))
   try {
