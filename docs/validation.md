@@ -32,6 +32,7 @@ Real-project checks were run from `/Users/artem/stuff/oss/vite8-doctor-validatio
 - `vite-plugin-pwa`: package-level peer metadata does not declare Vite 8 support, which validates the package peer metadata signal for plugin/library packages.
 - `vitepress`, `vinext`, and related plugin repositories: useful as workspace/project-shape smoke checks, not as full compatibility proof.
 - `oklch-picker`: already uses Vite 8, so it is only a report/probe smoke check, not Vite 7 to Vite 8 migration evidence.
+- `satnaing/astro-paper`: Astro project without a direct Vite dependency. This exposed that framework wrappers should not report `no-action`; they now produce a `framework-wrapper-scope` limitation.
 
 ## Current Confidence
 
@@ -42,6 +43,8 @@ The confidence boundary is explicit:
 - It does not prove runtime compatibility.
 - It does not safely probe partial workspaces in `0.1`.
 - It does not treat missing dependency output from a temp copy as proof by itself.
+- It does not treat generic temporary Vite 8 build failures as high-confidence migration proof.
+- It does not fully inventory plugins wired through CommonJS `require(...)` in `vite.config.cjs`.
 - It depends on the project's own tests for final migration confidence.
 
 The next confidence step is not more static rules by default. It is broader validation on real Vite 7 projects with known Vite 8 migration outcomes.

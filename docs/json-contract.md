@@ -29,7 +29,9 @@ The contract is additive within a schema version: new fields may appear, but doc
 
 - `low`: static-only report.
 - `medium`: probe ran but was inconclusive or has a calibration caveat.
-- `high`: probe ran and produced a clear current/Vite 8 build result.
+- `high`: probe ran and produced a clear non-failing result without calibration caveats.
+
+Temporary Vite 8 build failures are `medium` confidence in `0.1` because the temp copy installs with lifecycle scripts disabled. Agents should reproduce those failures on a normal branch before treating them as migration evidence.
 
 `summary.autoFixSafe` is always `false` in `0.1`.
 
@@ -64,6 +66,8 @@ Agents should not use the report as:
 - permission to automatically edit config
 - permission to automatically change dependencies
 - a replacement for the project's own test suite
+
+Frameworks that wrap Vite, such as Astro or Nuxt projects without a direct Vite dependency, are reported as scope limitations. Use those framework migration guides as the primary source.
 
 ## Compatibility Notes
 

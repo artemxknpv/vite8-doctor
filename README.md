@@ -69,6 +69,7 @@ npx vite8-doctor /path/to/project --probe-build --probe-vite8 --allow-install
 - installed plugin versions and `peerDependencies.vite`
 - migration-sensitive config such as `optimizeDeps`, `manualChunks`, `rollupOptions`, `esbuild`, `plugin-legacy`, and custom build targets
 - workspace project shape
+- framework wrappers with no direct Vite dependency, such as Astro or Nuxt, as scope limitations
 - current build status when `--probe-build` is enabled
 - temporary Vite 8 build status when `--probe-vite8 --allow-install` is enabled
 - migration hints with source URLs or local evidence
@@ -91,8 +92,10 @@ Hints are prompts for review. They are not compatibility guarantees.
 
 - `optimizeDeps` and `optimizeDeps.esbuildOptions`
 - `rollupOptions` and `manualChunks`
+- `esbuild`, `plugin-legacy`, and custom build targets
 - package and Vite plugin peer metadata that excludes Vite 8
 - unavailable plugin metadata when dependencies are missing
+- framework-wrapper scope limits
 - workspace scope limits
 - current build failures
 - disabled Yarn Vite 8 comparison
@@ -162,7 +165,10 @@ project shape: standalone
 - Static findings are review signals, not failures.
 - Peer dependency metadata can lag behind actual compatibility.
 - Missing plugin metadata means the dependency graph is not installed or not inspectable; it is not a compatibility signal.
+- Frameworks that wrap Vite without a direct Vite dependency or `vite.config.*` are outside `0.1`'s direct migration scope.
 - A missing dependency in the temporary Vite 8 copy can be a temp install artifact. Reproduce it on a normal branch before treating it as a migration failure.
+- A temporary Vite 8 build failure is not proof by itself because the temp copy installs with lifecycle scripts disabled.
+- CommonJS `require(...)` plugin detection is limited in `0.1`; use JSON output as a triage signal, not a complete plugin inventory.
 - AI agents should use JSON output for triage, issue drafting, and migration planning. They should not automatically edit config or dependencies based only on `vite8-doctor` hints.
 - Runtime correctness still requires the project's own tests.
 - Workspace-aware temp probes are not supported in `0.1`.

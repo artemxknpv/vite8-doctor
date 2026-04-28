@@ -66,6 +66,11 @@ const RISK_PATTERNS = [
     message: 'custom build targets should be checked after the Rolldown migration.'
   }
 ]
+const FORMALIZED_RISK_IDS = new Set(RISK_PATTERNS.map(risk => risk.id))
+const FRAMEWORK_WRAPPERS = [
+  { name: 'astro', label: 'Astro' },
+  { name: 'nuxt', label: 'Nuxt' }
+]
 
 const DEFAULT_TIMEOUT_MS = 120_000
 const OUTPUT_LIMIT = 12_000
@@ -344,6 +349,7 @@ function analyze(root) {
   const projectRoot = path.dirname(pkgPath)
   const pkg = readJson(pkgPath)
   const deps = collectDeps(pkg)
+  const frameworkWrappers = detectFrameworkWrappers(deps)
   const packageManager = detectPackageManager(projectRoot, pkg)
   const projectShape = detectProjectShape(projectRoot)
   const configPath = findConfig(projectRoot)
@@ -393,6 +399,7 @@ function analyze(root) {
     packageManagerRaw: pkg.packageManager ?? null,
     viteRange: deps.vite ?? null,
     dependencyNames: Object.keys(deps).sort(),
+    frameworkWrappers,
     ownVitePeerRange,
     ownVite8PeerSupported: vitePeerSupports8(ownVitePeerRange),
     configPath,
@@ -405,6 +412,7 @@ function analyze(root) {
       packageManagerRaw: pkg.packageManager ?? null,
       packageName: pkg.name ?? null,
       viteRange: deps.vite ?? null,
+      frameworkWrappers,
       ownVitePeerRange,
       projectRoot,
       configPath,
@@ -413,6 +421,16 @@ function analyze(root) {
     risks,
     plugins
   }
+}
+
+function detectFrameworkWrappers(deps) {
+  return FRAMEWORK_WRAPPERS
+    .filter(framework => deps[framework.name])
+    .map(framework => ({
+      name: framework.name,
+      label: framework.label,
+      range: deps[framework.name]
+    }))
 }
 
 function pluginMetadataStatus(installed, peerRange) {
@@ -814,6 +832,62 @@ function generateMigrationHints(report) {
     })
   }
 
+  if (hasRisk('esbuild-config', 'esbuild-minify')) {
+    hints.push({
+      id: 'esbuild-config',
+      title: 'esbuild config needs review',
+      trigger: 'vite.config contains esbuild config or esbuild minification',
+      evidence: riskEvidence(report, 'esbuild-config', 'esbuild-minify'),
+      sourceType: 'docs',
+      sourceUrl: VITE_ROLLDOWN_DOC,
+      disclaimer: 'Migration hint only; verify transform and minification behavior in this project.',
+      nextStep: 'Run the Vite 8 probe and focused tests around code transformed or minified through esbuild.',
+      agentAction: agentAction('run-focused-tests', 'esbuild-config')
+    })
+  }
+
+  if (hasRisk('plugin-legacy')) {
+    hints.push({
+      id: 'plugin-legacy',
+      title: '@vitejs/plugin-legacy needs review',
+      trigger: 'vite.config imports or calls @vitejs/plugin-legacy',
+      evidence: riskEvidence(report, 'plugin-legacy'),
+      sourceType: 'docs',
+      sourceUrl: VITE_MIGRATION_DOC,
+      disclaimer: 'Migration hint only; legacy browser support needs project-specific verification.',
+      nextStep: 'Check the plugin version, browser support targets, and run a production build against Vite 8.',
+      agentAction: agentAction('review-package-metadata', '@vitejs/plugin-legacy')
+    })
+  }
+
+  if (hasRisk('build-target')) {
+    hints.push({
+      id: 'build-target',
+      title: 'Custom build target needs review',
+      trigger: 'vite.config contains a custom build target',
+      evidence: riskEvidence(report, 'build-target'),
+      sourceType: 'docs',
+      sourceUrl: VITE_ROLLDOWN_DOC,
+      disclaimer: 'Migration hint only; custom targets are not failures by themselves.',
+      nextStep: 'Run the Vite 8 probe and verify output behavior in the browsers or runtimes this target represents.',
+      agentAction: agentAction('run-focused-tests', 'build-target')
+    })
+  }
+
+  if (!report.viteRange && report.frameworkWrappers.length) {
+    hints.push({
+      id: 'framework-wrapper-scope',
+      title: `${report.frameworkWrappers.map(framework => framework.label).join(', ')} project is outside direct Vite app scope`,
+      trigger: 'package.json contains a framework that wraps Vite but no direct Vite dependency was found',
+      evidence: { frameworkWrappers: report.frameworkWrappers },
+      sourceType: 'tool-limitation',
+      sourceUrl: null,
+      disclaimer: '0.1 is calibrated for direct Vite apps and plugins, not framework-specific migration proof.',
+      nextStep: 'Use the framework migration guide and run this tool only as a secondary static signal.',
+      agentAction: agentAction('inspect-framework-migration', report.frameworkWrappers.map(framework => framework.name).join(','))
+    })
+  }
+
   for (const plugin of report.plugins.filter(plugin => plugin.vite8PeerSupported === false)) {
     hints.push({
       id: 'plugin-peer-metadata',
@@ -931,6 +1005,23 @@ function generateMigrationHints(report) {
     })
   }
 
+  if (report.probe?.classification === 'vite8-build-failed' && !report.probe.tempCopyRisk) {
+    hints.push({
+      id: 'vite8-build-failed',
+      title: 'Temporary Vite 8 build failed',
+      trigger: 'current build passed, but temporary Vite 8 build failed',
+      evidence: {
+        command: report.probe.vite8?.build?.command ?? null,
+        exitCode: report.probe.vite8?.build?.exitCode ?? null
+      },
+      sourceType: 'local-build-output',
+      sourceUrl: null,
+      disclaimer: 'The temporary copy installs with lifecycle scripts disabled; reproduce on a normal Vite 8 branch before treating this as migration proof.',
+      nextStep: 'Inspect the build output, then rerun the same migration on a normal branch with the project package manager.',
+      agentAction: agentAction('reproduce-vite8-branch', 'vite8-build-failed', true)
+    })
+  }
+
   const newVite8Warnings = collectNewVite8Warnings(report)
   if (newVite8Warnings.length) {
     hints.push({
@@ -985,6 +1076,7 @@ function agentAction(kind, target, requiresHuman = false) {
 
 function summarizeReport(report) {
   const hints = report.migrationHints ?? []
+  const hintIds = new Set(hints.map(hint => hint.id))
   const probeClassification = report.probe?.classification ?? null
   const blockingClassifications = new Set(['baseline-broken', 'vite8-build-failed'])
   const status = probeClassification && blockingClassifications.has(probeClassification)
@@ -993,7 +1085,10 @@ function summarizeReport(report) {
       ? 'needs-review'
       : 'no-action'
   const confidence = report.probe
-    ? probeClassification === 'probe-inconclusive' || report.probe.tempCopyRisk
+    ? probeClassification === 'probe-inconclusive' ||
+      probeClassification === 'vite8-build-failed' ||
+      report.probe.tempCopyRisk ||
+      hintIds.has('plugin-metadata-unavailable')
       ? 'medium'
       : 'high'
     : 'low'
@@ -1017,12 +1112,7 @@ function summarizeReport(report) {
 }
 
 function hasFormalizedRisk(report) {
-  return report.risks.some(risk => [
-    'optimize-deps',
-    'optimize-deps-esbuild-options',
-    'rollup-output-manual-chunks',
-    'rollup-options'
-  ].includes(risk.id)) ||
+  return report.risks.some(risk => FORMALIZED_RISK_IDS.has(risk.id)) ||
     report.plugins.some(plugin => plugin.vite8PeerSupported === false) ||
     (report.ownVitePeerRange && report.ownVite8PeerSupported === false)
 }
@@ -1201,6 +1291,7 @@ function renderHintSource(hint) {
 function formatHintEvidence(evidence) {
   if (!evidence) return '(none)'
   if (evidence.file) return `${evidence.file}:${evidence.line} \`${evidence.snippet}\``
+  if (evidence.frameworkWrappers) return evidence.frameworkWrappers.map(framework => `${framework.label} ${framework.range}`).join(', ')
   if (evidence.packageName && evidence.vitePeerRange) return `${evidence.packageName} peer vite ${evidence.vitePeerRange}`
   if (evidence.packageJsonPath) return `${evidence.spec} peer vite ${evidence.vitePeerRange} in ${evidence.packageJsonPath}`
   if (evidence.metadataStatus) return `${evidence.spec} metadata status: ${evidence.metadataStatus}`

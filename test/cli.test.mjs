@@ -259,6 +259,48 @@ test('flags missing declared dependencies from the temporary Vite 8 copy as cali
   }
 })
 
+test('calibrates generic temporary Vite 8 build failures', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vite8-doctor-generic-vite8-failure-'))
+  const fakeBin = path.join(tmp, 'fake-bin')
+  try {
+    fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({
+      private: true,
+      type: 'module',
+      devDependencies: { vite: '^7.3.0' }
+    }))
+    writeExecutable(path.join(tmp, 'node_modules', '.bin', 'vite'), [
+      '#!/usr/bin/env sh',
+      'exit 0'
+    ].join('\n'))
+    writeExecutable(path.join(fakeBin, 'npm'), [
+      '#!/usr/bin/env sh',
+      'mkdir -p node_modules/.bin',
+      'cat > node_modules/.bin/vite <<\\EOF',
+      '#!/usr/bin/env sh',
+      'echo "Error: generated artifact missing after ignore-scripts install" >&2',
+      'exit 1',
+      'EOF',
+      'chmod +x node_modules/.bin/vite',
+      'exit 0'
+    ].join('\n'))
+
+    const result = run([tmp, '--probe-build', '--probe-vite8', '--allow-install', '--report', 'json'], {
+      env: { ...process.env, PATH: `${fakeBin}${path.delimiter}${process.env.PATH}` }
+    })
+    assert.equal(result.status, 0, result.stderr)
+    const report = JSON.parse(result.stdout)
+    assert.equal(report.probe.classification, 'vite8-build-failed')
+    assert.equal(report.summary.status, 'vite8-build-failed')
+    assert.equal(report.summary.confidence, 'medium')
+    const hint = report.migrationHints.find(candidate => candidate.id === 'vite8-build-failed')
+    assert.equal(hint.agentAction.kind, 'reproduce-vite8-branch')
+    assert.equal(hint.agentAction.requiresHuman, true)
+    assert.match(hint.disclaimer, /lifecycle scripts disabled/)
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
 test('flags warnings introduced by the temporary Vite 8 build', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vite8-doctor-vite8-warning-'))
   const fakeBin = path.join(tmp, 'fake-bin')
@@ -300,7 +342,7 @@ test('flags warnings introduced by the temporary Vite 8 build', () => {
   }
 })
 
-test('unformalized static risk does not change probe classification without a hint contract', () => {
+test('custom build targets produce an actionable hint contract', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vite8-doctor-unformalized-risk-'))
   try {
     fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({
@@ -315,8 +357,30 @@ test('unformalized static risk does not change probe classification without a hi
     fs.chmodSync(viteBin, 0o755)
     const report = reportJson([tmp, '--probe-build'])
     assert.equal(report.risks[0].id, 'build-target')
-    assert.equal(report.migrationHints.length, 0)
-    assert.equal(report.probe.classification, 'passed')
+    assert.equal(report.migrationHints[0].id, 'build-target')
+    assert.equal(report.migrationHints[0].agentAction.kind, 'run-focused-tests')
+    assert.equal(report.probe.classification, 'passed-with-risks')
+    assert.equal(report.summary.status, 'needs-review')
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
+test('framework wrappers without direct Vite dependency are scoped as limitations', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vite8-doctor-framework-wrapper-'))
+  try {
+    fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({
+      private: true,
+      type: 'module',
+      dependencies: { astro: '^5.16.6' }
+    }))
+    const report = reportJson([tmp])
+    assert.equal(report.viteRange, null)
+    assert.deepEqual(report.frameworkWrappers, [{ name: 'astro', label: 'Astro', range: '^5.16.6' }])
+    const hint = report.migrationHints.find(candidate => candidate.id === 'framework-wrapper-scope')
+    assert.equal(hint.sourceType, 'tool-limitation')
+    assert.equal(hint.agentAction.kind, 'inspect-framework-migration')
+    assert.equal(report.summary.status, 'needs-review')
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true })
   }
