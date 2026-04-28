@@ -69,9 +69,11 @@ Hints are prompts for review. They are not compatibility guarantees.
 - `optimizeDeps` and `optimizeDeps.esbuildOptions`
 - `rollupOptions` and `manualChunks`
 - package and Vite plugin peer metadata that excludes Vite 8
+- unavailable plugin metadata when dependencies are missing
 - workspace scope limits
 - current build failures
 - disabled Yarn Vite 8 comparison
+- missing declared dependencies in the temporary Vite 8 copy
 - Vite large chunk warnings
 
 External migration hints link to Vite docs. Local hints cite package metadata, build output, or tool limitations.
@@ -135,6 +137,8 @@ project shape: standalone
 
 - Static findings are review signals, not failures.
 - Peer dependency metadata can lag behind actual compatibility.
+- Missing plugin metadata means the dependency graph is not installed or not inspectable; it is not a compatibility signal.
+- A missing dependency in the temporary Vite 8 copy can be a temp install artifact. Reproduce it on a normal branch before treating it as a migration failure.
 - Runtime correctness still requires the project's own tests.
 - Workspace-aware temp probes are not supported in `0.1`.
 - Hints are a small initial catalog, not a full Vite 8 issue database.
@@ -143,6 +147,8 @@ project shape: standalone
 ## Case Studies
 
 Local development cases live under `docs/cases/`. They are excluded from the npm package by the package `files` allowlist.
+
+See `docs/validation.md` for the generated and real-project validation notes behind the `0.1` scope.
 
 ## Development
 

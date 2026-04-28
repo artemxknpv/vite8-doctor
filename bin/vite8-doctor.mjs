@@ -262,18 +262,23 @@ function readInstalledPackage(root, spec) {
   const packageName = packageNameFromSubpath(spec)
   const directPackageJson = findPackageJsonInNodeModules(root, packageName)
   if (directPackageJson) {
-    return { packageName, packageJsonPath: directPackageJson, pkg: readJson(directPackageJson) }
+    return { packageName, packageJsonPath: directPackageJson, pkg: readJson(directPackageJson), status: 'found' }
   }
   try {
     const packageJsonPath = requireFromRoot.resolve(`${packageName}/package.json`)
-    return { packageName, packageJsonPath, pkg: readJson(packageJsonPath) }
+    return { packageName, packageJsonPath, pkg: readJson(packageJsonPath), status: 'found' }
   } catch {
     try {
       const entry = requireFromRoot.resolve(packageName)
       const packageJsonPath = findPackageJsonAbove(entry)
-      return { packageName, packageJsonPath, pkg: packageJsonPath ? readJson(packageJsonPath) : null }
+      return {
+        packageName,
+        packageJsonPath,
+        pkg: packageJsonPath ? readJson(packageJsonPath) : null,
+        status: packageJsonPath ? 'found' : 'metadata-unavailable'
+      }
     } catch {
-      return { packageName, packageJsonPath: null, pkg: null }
+      return { packageName, packageJsonPath: null, pkg: null, status: 'package-missing' }
     }
   }
 }
@@ -355,6 +360,7 @@ function analyze(root) {
     return {
       spec,
       packageName: installed.packageName,
+      metadataStatus: pluginMetadataStatus(installed, peerRange),
       installedVersion: installed.pkg?.version ?? null,
       packageJsonPath: installed.packageJsonPath,
       vitePeerRange: peerRange,
@@ -369,6 +375,7 @@ function analyze(root) {
     packageManager,
     packageManagerRaw: pkg.packageManager ?? null,
     viteRange: deps.vite ?? null,
+    dependencyNames: Object.keys(deps).sort(),
     ownVitePeerRange,
     ownVite8PeerSupported: vitePeerSupports8(ownVitePeerRange),
     configPath,
@@ -389,6 +396,15 @@ function analyze(root) {
     risks,
     plugins
   }
+}
+
+function pluginMetadataStatus(installed, peerRange) {
+  if (installed.status !== 'found') return installed.status
+  return peerRange ? 'vite-peer-found' : 'no-vite-peer'
+}
+
+function hasUnavailablePluginMetadata(plugin) {
+  return plugin.metadataStatus === 'package-missing' || plugin.metadataStatus === 'metadata-unavailable'
 }
 
 function runProbe(report, options) {
@@ -462,6 +478,8 @@ function runProbe(report, options) {
   const vite8OutDir = path.join(tempRoot, 'vite8')
   const build = runViteBuild(tempProjectRoot, vite8OutDir, options.timeoutMs)
   probe.vite8 = { install, build }
+  const tempCopyRisk = detectTempCopyRisk(report, build)
+  if (tempCopyRisk) probe.tempCopyRisk = tempCopyRisk
   if (probe.current?.assets && build.assets) {
     probe.assetDelta = diffAssets(probe.current, build)
   }
@@ -473,6 +491,35 @@ function runProbe(report, options) {
 
   cleanupTemp(tempRoot, options.keepTemp)
   return probe
+}
+
+function detectTempCopyRisk(report, build) {
+  if (build.ok || !build.output) return null
+  const missingDependency = findMissingDeclaredDependency(report.dependencyNames ?? [], build.output)
+  if (!missingDependency) return null
+  return {
+    id: 'missing-declared-dependency',
+    dependency: missingDependency,
+    message: 'The temporary Vite 8 build could not resolve a dependency declared by the original package.'
+  }
+}
+
+function findMissingDeclaredDependency(dependencyNames, output) {
+  for (const dependency of dependencyNames) {
+    const escaped = escapeRegExp(dependency)
+    const patterns = [
+      new RegExp(`dependency ["']${escaped}["'] not found`, 'i'),
+      new RegExp(`Cannot find (?:package|module) ["']${escaped}["']`, 'i'),
+      new RegExp(`Could not resolve ["']${escaped}["']`, 'i'),
+      new RegExp(`Failed to resolve (?:import )?["']${escaped}["']`, 'i')
+    ]
+    if (patterns.some(pattern => pattern.test(output))) return dependency
+  }
+  return null
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function runViteBuild(root, outDir, timeoutMs) {
@@ -765,6 +812,24 @@ function generateMigrationHints(report) {
     })
   }
 
+  for (const plugin of report.plugins.filter(hasUnavailablePluginMetadata)) {
+    hints.push({
+      id: 'plugin-metadata-unavailable',
+      title: `${plugin.spec} metadata was not available`,
+      trigger: `plugin import resolved to ${plugin.metadataStatus}`,
+      evidence: {
+        spec: plugin.spec,
+        packageName: plugin.packageName,
+        metadataStatus: plugin.metadataStatus,
+        packageJsonPath: plugin.packageJsonPath
+      },
+      sourceType: 'package-metadata',
+      sourceUrl: null,
+      disclaimer: 'Missing plugin metadata is not a compatibility signal; install dependencies before trusting peer-range output.',
+      nextStep: 'Install project dependencies, rerun the report, and check whether the plugin declares Vite 8 support.'
+    })
+  }
+
   if (report.ownVitePeerRange && report.ownVite8PeerSupported === false) {
     hints.push({
       id: 'package-peer-metadata',
@@ -824,6 +889,19 @@ function generateMigrationHints(report) {
       sourceUrl: null,
       disclaimer: 'Disabled until lifecycle-script suppression is implemented safely.',
       nextStep: 'Use the static report, or run an isolated manual Vite 8 branch for Yarn projects.'
+    })
+  }
+
+  if (report.probe?.tempCopyRisk?.id === 'missing-declared-dependency') {
+    hints.push({
+      id: 'temp-copy-install-risk',
+      title: 'Temporary Vite 8 build missed a declared dependency',
+      trigger: 'Vite 8 build failed after temp install with a missing declared dependency',
+      evidence: report.probe.tempCopyRisk,
+      sourceType: 'local-build-output',
+      sourceUrl: null,
+      disclaimer: 'This may be a real Vite 8 migration failure or a temp-copy/install artifact; do not treat it as proof by itself.',
+      nextStep: 'Check the temporary install output, package manager config, and whether the same failure reproduces on a normal Vite 8 branch.'
     })
   }
 
@@ -904,14 +982,9 @@ function renderMarkdown(report) {
     lines.push('no Vite plugin imports detected')
   } else {
     for (const plugin of report.plugins) {
-      const support =
-        plugin.vite8PeerSupported === true
-          ? 'supports vite 8'
-          : plugin.vite8PeerSupported === false
-            ? 'does not declare vite 8 support'
-            : 'no vite peer range found'
+      const metadata = renderPluginMetadata(plugin)
       lines.push(
-        `- ${plugin.spec}: ${plugin.installedVersion ?? 'not installed'}, peer vite ${plugin.vitePeerRange ?? '(none)'}; ${support}`
+        `- ${plugin.spec}: ${metadata.version}, peer vite ${metadata.peerRange}; ${metadata.support}`
       )
       if (plugin.evidence) {
         lines.push(`  evidence: ${plugin.evidence.file}:${plugin.evidence.line} \`${plugin.evidence.snippet}\``)
@@ -952,6 +1025,7 @@ function renderGitHubReport(report) {
   lines.push(`### Summary`)
   lines.push(`- config risks: ${report.risks.length}`)
   lines.push(`- plugin peer issues: ${report.plugins.filter(plugin => plugin.vite8PeerSupported === false).length}`)
+  lines.push(`- plugin metadata unavailable: ${report.plugins.filter(hasUnavailablePluginMetadata).length}`)
   lines.push(`- migration hints: ${(report.migrationHints ?? []).length}`)
   if (report.probe) lines.push(`- probe classification: ${report.probe.classification}`)
   lines.push('')
@@ -975,13 +1049,8 @@ function renderGitHubReport(report) {
     lines.push('- no Vite plugin imports detected')
   } else {
     for (const plugin of report.plugins) {
-      const support =
-        plugin.vite8PeerSupported === true
-          ? 'supports Vite 8'
-          : plugin.vite8PeerSupported === false
-            ? 'does not declare Vite 8 support'
-            : 'no Vite peer range found'
-      lines.push(`- ${plugin.spec}: ${plugin.installedVersion ?? 'not installed'}, peer vite ${plugin.vitePeerRange ?? '(none)'}; ${support}`)
+      const metadata = renderPluginMetadata(plugin)
+      lines.push(`- ${plugin.spec}: ${metadata.version}, peer vite ${metadata.peerRange}; ${metadata.support}`)
     }
   }
   lines.push('')
@@ -994,6 +1063,24 @@ function renderGitHubReport(report) {
   }
 
   return `${lines.join('\n')}\n`
+}
+
+function renderPluginMetadata(plugin) {
+  const version = plugin.installedVersion ?? 'metadata unavailable'
+  const peerRange = plugin.vitePeerRange ?? '(none)'
+  const support =
+    plugin.vite8PeerSupported === true
+      ? 'supports Vite 8'
+      : plugin.vite8PeerSupported === false
+        ? 'does not declare Vite 8 support'
+        : plugin.metadataStatus === 'package-missing'
+          ? 'metadata unavailable: package is not installed'
+          : plugin.metadataStatus === 'metadata-unavailable'
+            ? 'metadata unavailable: package resolved without package.json'
+            : plugin.metadataStatus === 'no-vite-peer'
+              ? 'package has no peerDependencies.vite'
+              : 'no Vite peer range found'
+  return { version, peerRange, support }
 }
 
 function renderMigrationHints(lines, hints, heading = '##') {
@@ -1022,6 +1109,8 @@ function formatHintEvidence(evidence) {
   if (evidence.file) return `${evidence.file}:${evidence.line} \`${evidence.snippet}\``
   if (evidence.packageName && evidence.vitePeerRange) return `${evidence.packageName} peer vite ${evidence.vitePeerRange}`
   if (evidence.packageJsonPath) return `${evidence.spec} peer vite ${evidence.vitePeerRange} in ${evidence.packageJsonPath}`
+  if (evidence.metadataStatus) return `${evidence.spec} metadata status: ${evidence.metadataStatus}`
+  if (evidence.dependency) return `${evidence.id}: ${evidence.dependency}`
   if (evidence.warnings) return evidence.warnings.join(' | ')
   if (evidence.command) return `${evidence.command} exited ${evidence.exitCode}`
   if (evidence.kind === 'workspace-root') return `workspace-root with ${evidence.childPackageCount} child package${evidence.childPackageCount === 1 ? '' : 's'}`

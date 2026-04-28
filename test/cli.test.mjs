@@ -110,6 +110,45 @@ test('uses semver semantics for Vite 8 peer support', () => {
   assert.match(peerHint.disclaimer, /not proof of breakage/)
 })
 
+test('distinguishes unavailable plugin metadata from missing Vite peer metadata', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vite8-doctor-plugin-metadata-'))
+  try {
+    fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({
+      private: true,
+      type: 'module',
+      devDependencies: { vite: '^7.3.0' }
+    }))
+    fs.writeFileSync(path.join(tmp, 'vite.config.js'), [
+      "import missing from 'vite-plugin-missing'",
+      "import noPeer from 'vite-plugin-no-peer'",
+      'export default { plugins: [missing(), noPeer()] }'
+    ].join('\n'))
+    fs.mkdirSync(path.join(tmp, 'node_modules', 'vite-plugin-no-peer'), { recursive: true })
+    fs.writeFileSync(path.join(tmp, 'node_modules', 'vite-plugin-no-peer', 'package.json'), JSON.stringify({
+      name: 'vite-plugin-no-peer',
+      version: '1.0.0'
+    }))
+
+    const report = reportJson([tmp])
+    const bySpec = Object.fromEntries(report.plugins.map(plugin => [plugin.spec, plugin]))
+    assert.equal(bySpec['vite-plugin-missing'].metadataStatus, 'package-missing')
+    assert.equal(bySpec['vite-plugin-no-peer'].metadataStatus, 'no-vite-peer')
+    assert.equal(bySpec['vite-plugin-no-peer'].vite8PeerSupported, null)
+    assert.equal(
+      report.migrationHints.filter(hint => hint.id === 'plugin-metadata-unavailable').length,
+      1
+    )
+
+    const github = run([tmp, '--report', 'github'])
+    assert.equal(github.status, 0, github.stderr)
+    assert.match(github.stdout, /metadata unavailable: package is not installed/)
+    assert.match(github.stdout, /package has no peerDependencies\.vite/)
+    assert.match(github.stdout, /plugin metadata unavailable: 1/)
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
 test('flags package-level Vite peer metadata that excludes Vite 8', () => {
   const report = json(['fixtures/package-peer'])
   assert.equal(report.ownVitePeerRange, '^7.0.0')
@@ -157,6 +196,52 @@ test('detects large chunk warnings from local build output', () => {
   assert.equal(hint.sourceType, 'local-build-output')
   assert.match(hint.evidence.warnings[0], /larger than 500 kB/)
   assert.equal(report.probe.current.assets.largest[0].file, 'assets/app.js')
+})
+
+test('flags missing declared dependencies from the temporary Vite 8 copy as calibration risk', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vite8-doctor-temp-copy-risk-'))
+  const fakeBin = path.join(tmp, 'fake-bin')
+  try {
+    fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({
+      private: true,
+      type: 'module',
+      devDependencies: {
+        vite: '^7.3.0',
+        'declared-missing': '1.0.0'
+      }
+    }))
+    fs.writeFileSync(path.join(tmp, 'index.html'), '<script type="module" src="/src/main.js"></script>')
+    fs.mkdirSync(path.join(tmp, 'src'))
+    fs.writeFileSync(path.join(tmp, 'src', 'main.js'), 'console.log("temp copy risk")')
+    writeExecutable(path.join(tmp, 'node_modules', '.bin', 'vite'), [
+      '#!/usr/bin/env sh',
+      'exit 0'
+    ].join('\n'))
+    writeExecutable(path.join(fakeBin, 'npm'), [
+      '#!/usr/bin/env sh',
+      'mkdir -p node_modules/.bin',
+      'cat > node_modules/.bin/vite <<\\EOF',
+      '#!/usr/bin/env sh',
+      'echo "Error: dependency \\"declared-missing\\" not found" >&2',
+      'exit 1',
+      'EOF',
+      'chmod +x node_modules/.bin/vite',
+      'exit 0'
+    ].join('\n'))
+
+    const result = run([tmp, '--probe-build', '--probe-vite8', '--allow-install', '--report', 'json'], {
+      env: { ...process.env, PATH: `${fakeBin}${path.delimiter}${process.env.PATH}` }
+    })
+    assert.equal(result.status, 0, result.stderr)
+    const report = JSON.parse(result.stdout)
+    assert.equal(report.probe.classification, 'vite8-build-failed')
+    assert.equal(report.probe.tempCopyRisk.dependency, 'declared-missing')
+    const hint = report.migrationHints.find(candidate => candidate.id === 'temp-copy-install-risk')
+    assert.equal(hint.sourceType, 'local-build-output')
+    assert.match(hint.disclaimer, /temp-copy\/install artifact/)
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
 })
 
 test('unformalized static risk does not change probe classification without a hint contract', () => {
